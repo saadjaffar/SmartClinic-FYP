@@ -51,7 +51,6 @@ def create_token(
             )
     }
 
-
     return jwt.encode(
         payload,
         os.getenv(
@@ -63,7 +62,6 @@ def create_token(
 
 def decode_token(token):
     try:
-
         return jwt.decode(
             token,
             os.getenv(
@@ -75,7 +73,6 @@ def decode_token(token):
         )
 
     except jwt.InvalidTokenError:
-
         return None
 
 
@@ -98,11 +95,16 @@ PASSWORD_CHANGE_ALLOWED_PATHS = {
 
 
 def enforce_staff_password_change(
-    decoded
+    decoded,
+    user
 ):
     """
     Prevent Doctor/Receptionist from using protected APIs
     while their temporary password is still active.
+
+    The user's existence, active status and role have already
+    been validated by token_required() before this function
+    runs.
 
     Returns:
         None -> request may continue
@@ -115,71 +117,36 @@ def enforce_staff_password_change(
         "role"
     )
 
+    # --------------------------------------------------------
+    # PATIENT / ADMIN
+    #
+    # They do not use the temporary staff-password flow.
+    # --------------------------------------------------------
 
-    # Patients/Admin do not use the temporary
-    # staff-password flow.
     if role not in STAFF_ROLES:
         return None
 
+    # --------------------------------------------------------
+    # STAFF MUST BE ABLE TO ACCESS THESE ROUTES
+    #
+    # /me lets frontend inspect must_change_password.
+    #
+    # /change-password lets staff replace the temporary
+    # password.
+    # --------------------------------------------------------
 
-    # Staff must be able to access these routes
-    # before changing the temporary password.
     if (
         request.path
         in PASSWORD_CHANGE_ALLOWED_PATHS
     ):
         return None
 
-
-    user_id = decoded.get(
-        "user_id"
-    )
-
-
-    if not user_id:
-        return {
-            "message":
-                "Invalid authentication token",
-
-            "status":
-                "error"
-        }, 401
-
-
-    # Local imports prevent circular-import problems.
-    from app import db
-    from app.models.user import User
-
-
-    user = db.session.get(
-        User,
-        user_id
-    )
-
-
-    if not user:
-        return {
-            "message":
-                "User account no longer exists",
-
-            "status":
-                "error"
-        }, 401
-
-
-    if user.status != "active":
-        return {
-            "message":
-                "Account is inactive",
-
-            "status":
-                "error"
-        }, 403
-
+    # --------------------------------------------------------
+    # FORCE TEMPORARY PASSWORD CHANGE
+    # --------------------------------------------------------
 
     if (
-        user.role in STAFF_ROLES
-        and user.must_change_password
+        user.must_change_password
         is True
     ):
         return {
@@ -198,7 +165,6 @@ def enforce_staff_password_change(
             "must_change_password":
                 True
         }, 403
-
 
     return None
 
@@ -221,7 +187,6 @@ def token_required(f):
             )
         )
 
-
         if not auth_header:
             return {
                 "message":
@@ -231,11 +196,9 @@ def token_required(f):
                     "error"
             }, 401
 
-
         auth_header = (
             auth_header.strip()
         )
-
 
         # ----------------------------------------------------
         # REMOVE OPTIONAL "Bearer "
@@ -244,7 +207,6 @@ def token_required(f):
         if auth_header.lower().startswith(
             "bearer "
         ):
-
             token = (
                 auth_header[
                     7:
@@ -253,11 +215,9 @@ def token_required(f):
             )
 
         else:
-
             token = (
                 auth_header
             )
-
 
         if not token:
             return {
@@ -268,9 +228,8 @@ def token_required(f):
                     "error"
             }, 401
 
-
         # ----------------------------------------------------
-        # VERIFY JWT
+        # VERIFY JWT SIGNATURE + EXPIRY
         # ----------------------------------------------------
 
         decoded = (
@@ -278,7 +237,6 @@ def token_required(f):
                 token
             )
         )
-
 
         if not decoded:
             return {
@@ -289,12 +247,98 @@ def token_required(f):
                     "error"
             }, 401
 
+        # ----------------------------------------------------
+        # VALIDATE REQUIRED JWT CLAIMS
+        # ----------------------------------------------------
 
-        # Make decoded JWT available to routes.
+        user_id = decoded.get(
+            "user_id"
+        )
+
+        token_role = decoded.get(
+            "role"
+        )
+
+        if (
+            not user_id
+            or not token_role
+        ):
+            return {
+                "message":
+                    "Invalid authentication token",
+
+                "status":
+                    "error"
+            }, 401
+
+        # ----------------------------------------------------
+        # VALIDATE ACCOUNT AGAINST DATABASE
+        #
+        # JWT being cryptographically valid is not enough.
+        #
+        # This check applies to EVERY role:
+        # - patient
+        # - doctor
+        # - receptionist
+        # - admin
+        # ----------------------------------------------------
+
+        # Local imports prevent circular-import problems.
+        from app import db
+        from app.models.user import User
+
+        user = db.session.get(
+            User,
+            user_id
+        )
+
+        if not user:
+            return {
+                "message":
+                    "User account no longer exists",
+
+                "status":
+                    "error"
+            }, 401
+
+        # ----------------------------------------------------
+        # ACCOUNT MUST STILL BE ACTIVE
+        # ----------------------------------------------------
+
+        if user.status != "active":
+            return {
+                "message":
+                    "Account is inactive",
+
+                "status":
+                    "error"
+            }, 403
+
+        # ----------------------------------------------------
+        # TOKEN ROLE MUST MATCH CURRENT DATABASE ROLE
+        #
+        # Prevent an old JWT from retaining permissions if
+        # a user's role is ever changed in the database.
+        # ----------------------------------------------------
+
+        if user.role != token_role:
+            return {
+                "message": (
+                    "Authentication token no longer "
+                    "matches this account"
+                ),
+
+                "status":
+                    "error"
+            }, 401
+
+        # ----------------------------------------------------
+        # MAKE VALIDATED JWT AVAILABLE TO ROUTES
+        # ----------------------------------------------------
+
         request.user = (
             decoded
         )
-
 
         # ----------------------------------------------------
         # FORCE STAFF TEMPORARY PASSWORD CHANGE
@@ -302,20 +346,22 @@ def token_required(f):
 
         password_change_error = (
             enforce_staff_password_change(
-                decoded
+                decoded,
+                user
             )
         )
-
 
         if password_change_error:
             return password_change_error
 
+        # ----------------------------------------------------
+        # AUTHENTICATION SUCCESS
+        # ----------------------------------------------------
 
         return f(
             *args,
             **kwargs
         )
-
 
     return decorated
 
@@ -348,7 +394,6 @@ def role_required(
                         "error"
                 }, 401
 
-
             if (
                 request.user.get(
                     "role"
@@ -366,14 +411,11 @@ def role_required(
                         "error"
                 }, 403
 
-
             return f(
                 *args,
                 **kwargs
             )
 
-
         return decorated
-
 
     return decorator

@@ -72,7 +72,6 @@ def admin_dashboard():
         User.query.count()
     )
 
-
     total_patients = (
         User.query
         .filter_by(
@@ -80,7 +79,6 @@ def admin_dashboard():
         )
         .count()
     )
-
 
     total_doctors = (
         User.query
@@ -90,7 +88,6 @@ def admin_dashboard():
         .count()
     )
 
-
     total_receptionists = (
         User.query
         .filter_by(
@@ -98,7 +95,6 @@ def admin_dashboard():
         )
         .count()
     )
-
 
     active_users = (
         User.query
@@ -108,7 +104,6 @@ def admin_dashboard():
         .count()
     )
 
-
     inactive_users = (
         User.query
         .filter_by(
@@ -116,7 +111,6 @@ def admin_dashboard():
         )
         .count()
     )
-
 
     doctors_on_duty = (
         Doctor.query
@@ -126,7 +120,6 @@ def admin_dashboard():
         .count()
     )
 
-
     doctors_off_duty = (
         Doctor.query
         .filter_by(
@@ -135,37 +128,27 @@ def admin_dashboard():
         .count()
     )
 
-
     return {
         "message": (
             "Admin dashboard retrieved successfully"
         ),
-
         "status":
             "success",
-
         "stats": {
             "total_users":
                 total_users,
-
             "patients":
                 total_patients,
-
             "doctors":
                 total_doctors,
-
             "receptionists":
                 total_receptionists,
-
             "active_users":
                 active_users,
-
             "inactive_users":
                 inactive_users,
-
             "doctors_on_duty":
                 doctors_on_duty,
-
             "doctors_off_duty":
                 doctors_off_duty
         }
@@ -210,9 +193,7 @@ def get_doctors():
         .all()
     )
 
-
     result = []
-
 
     for doctor in doctors:
 
@@ -221,48 +202,34 @@ def get_doctors():
             doctor.user_id
         )
 
-
         if not user:
             continue
-
 
         result.append({
             "doctor_id":
                 doctor.id,
-
             "user_id":
                 user.id,
-
             "name":
                 user.name,
-
             "email":
                 user.email,
-
             "status":
                 user.status,
-
             "email_verified":
                 user.email_verified,
-
             "must_change_password":
                 user.must_change_password,
-
             "specialization":
                 doctor.specialization,
-
             "license_number":
                 doctor.license_number,
-
             "room_number":
                 doctor.room_number,
-
             "working_hours":
                 doctor.working_hours,
-
             "duty_status":
                 doctor.duty_status,
-
             "created_at": (
                 user.created_at.isoformat()
                 if user.created_at
@@ -270,18 +237,14 @@ def get_doctors():
             )
         })
 
-
     return {
         "message": (
             "Doctors retrieved successfully"
         ),
-
         "status":
             "success",
-
         "count":
             len(result),
-
         "doctors":
             result
     }, 200
@@ -360,17 +323,14 @@ def create_doctor():
         silent=True
     )
 
-
     if not data:
         return {
             "message": (
                 "Request body is required"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     name = str(
         data.get(
@@ -379,14 +339,12 @@ def create_doctor():
         )
     ).strip()
 
-
     email = str(
         data.get(
             "email",
             ""
         )
     ).strip().lower()
-
 
     password = str(
         data.get(
@@ -395,14 +353,12 @@ def create_doctor():
         )
     )
 
-
     specialization = str(
         data.get(
             "specialization",
             ""
         )
     ).strip()
-
 
     license_number = str(
         data.get(
@@ -411,14 +367,12 @@ def create_doctor():
         )
     ).strip() or None
 
-
     room_number = str(
         data.get(
             "room_number",
             ""
         )
     ).strip() or None
-
 
     working_hours = str(
         data.get(
@@ -427,14 +381,12 @@ def create_doctor():
         )
     ).strip() or None
 
-
     duty_status = str(
         data.get(
             "duty_status",
             "off_duty"
         )
     ).strip()
-
 
     # --------------------------------------------------------
     # REQUIRED FIELDS
@@ -451,11 +403,9 @@ def create_doctor():
                 "Name, email, password and "
                 "specialization are required"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     # --------------------------------------------------------
     # EMAIL
@@ -469,11 +419,9 @@ def create_doctor():
                 "Please enter a valid "
                 "email address"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     # --------------------------------------------------------
     # TEMPORARY PASSWORD
@@ -487,11 +435,9 @@ def create_doctor():
                 "Password must be at least "
                 "8 characters long"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     # --------------------------------------------------------
     # DUTY STATUS
@@ -506,11 +452,9 @@ def create_doctor():
                 "duty_status must be "
                 "on_duty or off_duty"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     # --------------------------------------------------------
     # DUPLICATE EMAIL
@@ -526,18 +470,15 @@ def create_doctor():
         .first()
     )
 
-
     if existing_user:
         return {
             "message": (
                 "A user with this email "
                 "already exists"
             ),
-
             "status":
                 "error"
         }, 409
-
 
     # --------------------------------------------------------
     # CREATE DOCTOR
@@ -548,18 +489,14 @@ def create_doctor():
         doctor_user = User(
             name=
                 name,
-
             email=
                 email,
-
             password_hash=
                 hash_password(
                     password
                 ),
-
             role=
                 "doctor",
-
             status=
                 "active",
 
@@ -582,40 +519,30 @@ def create_doctor():
                 0
         )
 
-
         db.session.add(
             doctor_user
         )
 
-
         db.session.flush()
-
 
         doctor = Doctor(
             user_id=
                 doctor_user.id,
-
             specialization=
                 specialization,
-
             license_number=
                 license_number,
-
             room_number=
                 room_number,
-
             working_hours=
                 working_hours,
-
             duty_status=
                 duty_status
         )
 
-
         db.session.add(
             doctor
         )
-
 
         # ----------------------------------------------------
         # IMPORTANT:
@@ -624,21 +551,17 @@ def create_doctor():
 
         db.session.commit()
 
-
     except Exception:
 
         db.session.rollback()
-
 
         return {
             "message": (
                 "Failed to create doctor"
             ),
-
             "status":
                 "error"
         }, 500
-
 
     # --------------------------------------------------------
     # SEND ACCOUNT CREATED EMAIL
@@ -649,20 +572,16 @@ def create_doctor():
 
     email_sent = True
 
-
     try:
 
         send_staff_account_created_email(
             recipient_email=
                 doctor_user.email,
-
             recipient_name=
                 doctor_user.name,
-
             role=
                 "doctor"
         )
-
 
     except Exception as email_error:
 
@@ -672,7 +591,6 @@ def create_doctor():
             "Doctor account email failed:",
             email_error
         )
-
 
     # --------------------------------------------------------
     # RESPONSE
@@ -688,44 +606,31 @@ def create_doctor():
                 "email could not be sent."
             )
         ),
-
         "status":
             "success",
-
         "email_sent":
             email_sent,
-
         "doctor": {
             "doctor_id":
                 doctor.id,
-
             "user_id":
                 doctor_user.id,
-
             "name":
                 doctor_user.name,
-
             "email":
                 doctor_user.email,
-
             "status":
                 doctor_user.status,
-
             "must_change_password":
                 doctor_user.must_change_password,
-
             "specialization":
                 doctor.specialization,
-
             "license_number":
                 doctor.license_number,
-
             "room_number":
                 doctor.room_number,
-
             "working_hours":
                 doctor.working_hours,
-
             "duty_status":
                 doctor.duty_status
         }
@@ -768,34 +673,25 @@ def get_receptionists():
         .all()
     )
 
-
     result = []
-
 
     for receptionist in receptionists:
 
         result.append({
             "id":
                 receptionist.id,
-
             "name":
                 receptionist.name,
-
             "email":
                 receptionist.email,
-
             "role":
                 receptionist.role,
-
             "status":
                 receptionist.status,
-
             "email_verified":
                 receptionist.email_verified,
-
             "must_change_password":
                 receptionist.must_change_password,
-
             "created_at": (
                 receptionist
                 .created_at
@@ -805,18 +701,14 @@ def get_receptionists():
             )
         })
 
-
     return {
         "message": (
             "Receptionists retrieved successfully"
         ),
-
         "status":
             "success",
-
         "count":
             len(result),
-
         "receptionists":
             result
     }, 200
@@ -879,17 +771,14 @@ def create_receptionist():
         silent=True
     )
 
-
     if not data:
         return {
             "message": (
                 "Request body is required"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     name = str(
         data.get(
@@ -898,7 +787,6 @@ def create_receptionist():
         )
     ).strip()
 
-
     email = str(
         data.get(
             "email",
@@ -906,14 +794,12 @@ def create_receptionist():
         )
     ).strip().lower()
 
-
     password = str(
         data.get(
             "password",
             ""
         )
     )
-
 
     # --------------------------------------------------------
     # REQUIRED FIELDS
@@ -929,11 +815,9 @@ def create_receptionist():
                 "Name, email and password "
                 "are required"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     # --------------------------------------------------------
     # EMAIL
@@ -947,11 +831,9 @@ def create_receptionist():
                 "Please enter a valid "
                 "email address"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     # --------------------------------------------------------
     # TEMPORARY PASSWORD
@@ -965,11 +847,9 @@ def create_receptionist():
                 "Password must be at least "
                 "8 characters long"
             ),
-
             "status":
                 "error"
         }, 400
-
 
     # --------------------------------------------------------
     # DUPLICATE EMAIL
@@ -985,18 +865,15 @@ def create_receptionist():
         .first()
     )
 
-
     if existing_user:
         return {
             "message": (
                 "A user with this email "
                 "already exists"
             ),
-
             "status":
                 "error"
         }, 409
-
 
     # --------------------------------------------------------
     # CREATE RECEPTIONIST
@@ -1007,18 +884,14 @@ def create_receptionist():
         receptionist = User(
             name=
                 name,
-
             email=
                 email,
-
             password_hash=
                 hash_password(
                     password
                 ),
-
             role=
                 "receptionist",
-
             status=
                 "active",
 
@@ -1041,11 +914,9 @@ def create_receptionist():
                 0
         )
 
-
         db.session.add(
             receptionist
         )
-
 
         # ----------------------------------------------------
         # Save account first.
@@ -1053,21 +924,17 @@ def create_receptionist():
 
         db.session.commit()
 
-
     except Exception:
 
         db.session.rollback()
-
 
         return {
             "message": (
                 "Failed to create receptionist"
             ),
-
             "status":
                 "error"
         }, 500
-
 
     # --------------------------------------------------------
     # SEND ACCOUNT CREATED EMAIL
@@ -1075,20 +942,16 @@ def create_receptionist():
 
     email_sent = True
 
-
     try:
 
         send_staff_account_created_email(
             recipient_email=
                 receptionist.email,
-
             recipient_name=
                 receptionist.name,
-
             role=
                 "receptionist"
         )
-
 
     except Exception as email_error:
 
@@ -1098,7 +961,6 @@ def create_receptionist():
             "Receptionist account email failed:",
             email_error
         )
-
 
     # --------------------------------------------------------
     # RESPONSE
@@ -1114,30 +976,289 @@ def create_receptionist():
                 "email could not be sent."
             )
         ),
-
         "status":
             "success",
-
         "email_sent":
             email_sent,
-
         "receptionist": {
             "id":
                 receptionist.id,
-
             "name":
                 receptionist.name,
-
             "email":
                 receptionist.email,
-
             "role":
                 receptionist.role,
-
             "status":
                 receptionist.status,
-
             "must_change_password":
                 receptionist.must_change_password
         }
     }, 201
+
+
+# ============================================================
+# ADMIN - ACTIVATE / DEACTIVATE STAFF
+# ============================================================
+
+@admin_bp.route(
+    "/staff/<int:user_id>/status",
+    methods=["PATCH"]
+)
+@token_required
+@role_required("admin")
+def update_staff_status(user_id):
+    """
+    Activate or deactivate a doctor/receptionist account
+    ---
+    tags:
+      - Admin
+    security:
+      - Bearer: []
+    consumes:
+      - application/json
+    parameters:
+      - in: path
+        name: user_id
+        required: true
+        type: integer
+        example: 4
+
+      - in: body
+        name: status
+        required: true
+        schema:
+          type: object
+          required:
+            - status
+          properties:
+            status:
+              type: string
+              enum:
+                - active
+                - inactive
+              example: inactive
+
+    responses:
+      200:
+        description: Staff account status updated successfully
+
+      400:
+        description: Invalid status or unsupported account role
+
+      403:
+        description: Admin access required
+
+      404:
+        description: Staff account not found
+
+      500:
+        description: Failed to update staff account
+    """
+
+    # --------------------------------------------------------
+    # REQUEST BODY
+    # --------------------------------------------------------
+
+    data = request.get_json(
+        silent=True
+    )
+
+    if not data:
+        return {
+            "message":
+                "Request body is required",
+            "status":
+                "error"
+        }, 400
+
+
+    # --------------------------------------------------------
+    # STATUS
+    # --------------------------------------------------------
+
+    new_status = str(
+        data.get(
+            "status",
+            ""
+        )
+    ).strip().lower()
+
+
+    if new_status not in [
+        "active",
+        "inactive"
+    ]:
+        return {
+            "message": (
+                "status must be active "
+                "or inactive"
+            ),
+            "status":
+                "error"
+        }, 400
+
+
+    # --------------------------------------------------------
+    # USER
+    # --------------------------------------------------------
+
+    user = db.session.get(
+        User,
+        user_id
+    )
+
+
+    if not user:
+        return {
+            "message":
+                "Staff account not found",
+            "status":
+                "error"
+        }, 404
+
+
+    # --------------------------------------------------------
+    # ONLY STAFF ACCOUNTS
+    #
+    # Admin accounts and patient accounts must not be changed
+    # through this route.
+    # --------------------------------------------------------
+
+    if user.role not in [
+        "doctor",
+        "receptionist"
+    ]:
+        return {
+            "message": (
+                "Only doctor and receptionist "
+                "accounts can be managed "
+                "through this endpoint"
+            ),
+            "status":
+                "error"
+        }, 400
+
+
+    previous_status = (
+        user.status
+    )
+
+
+    # --------------------------------------------------------
+    # UPDATE
+    # --------------------------------------------------------
+
+    try:
+
+        user.status = (
+            new_status
+        )
+
+
+        doctor = None
+
+
+        # ----------------------------------------------------
+        # DOCTOR-SPECIFIC SAFETY
+        #
+        # An inactive doctor must never remain marked on-duty.
+        #
+        # When the doctor is reactivated we intentionally keep
+        # duty_status as off_duty. The doctor can explicitly
+        # mark themselves on duty again after login.
+        # ----------------------------------------------------
+
+        if user.role == "doctor":
+
+            doctor = (
+                Doctor.query
+                .filter_by(
+                    user_id=user.id
+                )
+                .first()
+            )
+
+
+            if not doctor:
+
+                db.session.rollback()
+
+                return {
+                    "message": (
+                        "Doctor profile "
+                        "not found"
+                    ),
+                    "status":
+                        "error"
+                }, 404
+
+
+            if (
+                new_status
+                == "inactive"
+            ):
+                doctor.duty_status = (
+                    "off_duty"
+                )
+
+
+        db.session.commit()
+
+
+    except Exception:
+
+        db.session.rollback()
+
+        return {
+            "message": (
+                "Failed to update "
+                "staff account status"
+            ),
+            "status":
+                "error"
+        }, 500
+
+
+    # --------------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------------
+
+    response = {
+        "message": (
+            f"{user.role.capitalize()} "
+            f"account "
+            f"{'activated' if new_status == 'active' else 'deactivated'} "
+            f"successfully"
+        ),
+        "status":
+            "success",
+        "staff": {
+            "user_id":
+                user.id,
+            "name":
+                user.name,
+            "email":
+                user.email,
+            "role":
+                user.role,
+            "previous_status":
+                previous_status,
+            "status":
+                user.status
+        }
+    }
+
+
+    if doctor:
+
+        response["staff"]["doctor_id"] = (
+            doctor.id
+        )
+
+        response["staff"]["duty_status"] = (
+            doctor.duty_status
+        )
+
+
+    return response, 200

@@ -2,25 +2,22 @@ import hashlib
 import hmac
 import re
 import secrets
-
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request
 
 from app import db
-from app.models.user import User
 from app.models.patient import Patient
-
+from app.models.user import User
 from app.utils.auth import (
-    hash_password,
     check_password,
     create_token,
+    hash_password,
     token_required,
 )
-
 from app.utils.email_service import (
-    send_verification_email,
     send_password_reset_email,
+    send_verification_email,
     send_welcome_email,
 )
 
@@ -38,9 +35,7 @@ EMAIL_PATTERN = re.compile(
 
 def is_valid_email(email):
     return bool(
-        EMAIL_PATTERN.fullmatch(
-            email
-        )
+        EMAIL_PATTERN.fullmatch(email)
     )
 
 
@@ -55,16 +50,14 @@ PASSWORD_RESET_ROLES = (
 )
 
 
-def get_password_reset_user(
-    email
-):
+def get_password_reset_user(email):
     return (
         User.query
         .filter(
             User.email == email,
             User.role.in_(
                 PASSWORD_RESET_ROLES
-            )
+            ),
         )
         .first()
     )
@@ -76,9 +69,7 @@ def get_password_reset_user(
 
 def generate_verification_code():
     return str(
-        secrets.randbelow(
-            900000
-        )
+        secrets.randbelow(900000)
         + 100000
     )
 
@@ -93,9 +84,7 @@ def generate_reset_token():
     )
 
 
-def hash_reset_token(
-    token
-):
+def hash_reset_token(token):
     return hashlib.sha256(
         token.encode(
             "utf-8"
@@ -128,22 +117,68 @@ def register():
     ---
     tags:
       - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - name
+            - email
+            - contact
+            - age
+            - gender
+            - password
+          properties:
+            name:
+              type: string
+              example: Ali Ahmed
+            email:
+              type: string
+              format: email
+              example: patient@gmail.com
+            contact:
+              type: string
+              example: "03001234567"
+            age:
+              type: integer
+              example: 25
+            gender:
+              type: string
+              enum:
+                - Male
+                - Female
+                - Other
+              example: Male
+            password:
+              type: string
+              format: password
+              example: Patient@123
+    responses:
+      201:
+        description: Registration successful
+      400:
+        description: Invalid registration request
+      409:
+        description: Email already registered
+      500:
+        description: Registration failed
     """
 
     data = request.get_json(
         silent=True
     )
 
-
     if not data:
         return {
             "message":
                 "Request body is required",
-
             "status":
                 "error",
         }, 400
-
 
     name = str(
         data.get(
@@ -152,14 +187,12 @@ def register():
         )
     ).strip()
 
-
     email = str(
         data.get(
             "email",
             ""
         )
     ).strip().lower()
-
 
     contact = str(
         data.get(
@@ -168,14 +201,12 @@ def register():
         )
     ).strip()
 
-
     password = str(
         data.get(
             "password",
             ""
         )
     )
-
 
     gender = str(
         data.get(
@@ -184,11 +215,9 @@ def register():
         )
     ).strip()
 
-
     age_value = data.get(
         "age"
     )
-
 
     # --------------------------------------------------------
     # REQUIRED FIELDS
@@ -207,11 +236,9 @@ def register():
                 "Name, email, contact, age, "
                 "gender and password are required"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # EMAIL
@@ -223,11 +250,9 @@ def register():
         return {
             "message":
                 "Please enter a valid email address",
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # PASSWORD
@@ -241,18 +266,15 @@ def register():
                 "Password must be at least "
                 "8 characters long"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # AGE
     # --------------------------------------------------------
 
     try:
-
         age = int(
             age_value
         )
@@ -261,15 +283,12 @@ def register():
         TypeError,
         ValueError,
     ):
-
         return {
             "message":
                 "Age must be a valid number",
-
             "status":
                 "error",
         }, 400
-
 
     if (
         age < 0
@@ -280,11 +299,9 @@ def register():
                 "Age must be between "
                 "0 and 120"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # GENDER
@@ -300,11 +317,9 @@ def register():
                 "Gender must be Male, "
                 "Female or Other"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # DUPLICATE EMAIL
@@ -318,28 +333,23 @@ def register():
         .first()
     )
 
-
     if existing_user:
         return {
             "message":
                 "Email already registered",
-
             "status":
                 "error",
         }, 409
 
-
     verification_code = (
         generate_verification_code()
     )
-
 
     # --------------------------------------------------------
     # CREATE ACCOUNT
     # --------------------------------------------------------
 
     try:
-
         user = User(
             name=
                 name,
@@ -369,24 +379,22 @@ def register():
                     verification_code
                 ),
 
-            verification_expires_at=
+            verification_expires_at=(
                 datetime.utcnow()
                 + timedelta(
                     minutes=10
-                ),
+                )
+            ),
 
             verification_attempts=
                 0,
         )
 
-
         db.session.add(
             user
         )
 
-
         db.session.flush()
-
 
         patient = Patient(
             user_id=
@@ -402,35 +410,27 @@ def register():
                 gender,
         )
 
-
         db.session.add(
             patient
         )
 
-
         db.session.commit()
 
-
     except Exception:
-
         db.session.rollback()
-
 
         return {
             "message":
                 "Registration failed",
-
             "status":
                 "error",
         }, 500
-
 
     # --------------------------------------------------------
     # SEND VERIFICATION EMAIL
     # --------------------------------------------------------
 
     try:
-
         send_verification_email(
             recipient_email=
                 user.email,
@@ -442,9 +442,7 @@ def register():
                 verification_code,
         )
 
-
     except Exception:
-
         return {
             "message": (
                 "Account created, but the "
@@ -462,7 +460,6 @@ def register():
             "email":
                 user.email,
         }, 201
-
 
     return {
         "message": (
@@ -490,21 +487,50 @@ def register():
     methods=["POST"],
 )
 def verify_email():
+    """
+    Verify patient email using OTP
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+            - code
+          properties:
+            email:
+              type: string
+              format: email
+              example: patient@gmail.com
+            code:
+              type: string
+              example: "123456"
+    responses:
+      200:
+        description: Email verified successfully
+      400:
+        description: Invalid, incorrect or expired verification code
+      429:
+        description: Too many incorrect verification attempts
+    """
 
     data = request.get_json(
         silent=True
     )
 
-
     if not data:
         return {
             "message":
                 "Request body is required",
-
             "status":
                 "error",
         }, 400
-
 
     email = str(
         data.get(
@@ -513,14 +539,12 @@ def verify_email():
         )
     ).strip().lower()
 
-
     code = str(
         data.get(
             "code",
             ""
         )
     ).strip()
-
 
     if (
         not email
@@ -531,11 +555,9 @@ def verify_email():
                 "Email and verification "
                 "code are required"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if not re.fullmatch(
         r"\d{6}",
@@ -546,11 +568,9 @@ def verify_email():
                 "Verification code must "
                 "contain exactly 6 digits"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     user = (
         User.query
@@ -561,26 +581,21 @@ def verify_email():
         .first()
     )
 
-
     if not user:
         return {
             "message":
                 "Invalid verification request",
-
             "status":
                 "error",
         }, 400
-
 
     if user.email_verified:
         return {
             "message":
                 "Email is already verified",
-
             "status":
                 "success",
         }, 200
-
 
     if (
         not user.verification_code_hash
@@ -592,11 +607,9 @@ def verify_email():
                 "code. Please request "
                 "a new code."
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if (
         user.verification_attempts
@@ -607,11 +620,9 @@ def verify_email():
                 "Too many incorrect attempts. "
                 "Please request a new code."
             ),
-
             "status":
                 "error",
         }, 429
-
 
     if (
         datetime.utcnow()
@@ -622,53 +633,41 @@ def verify_email():
                 "Verification code has expired. "
                 "Please request a new code."
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if not check_password(
         code,
         user.verification_code_hash,
     ):
-
         user.verification_attempts += 1
 
         db.session.commit()
 
-
         return {
             "message":
                 "Incorrect verification code",
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # OTP CORRECT
     # --------------------------------------------------------
 
     user.email_verified = True
-
     user.verification_code_hash = None
-
     user.verification_expires_at = None
-
     user.verification_attempts = 0
 
-
     db.session.commit()
-
 
     # --------------------------------------------------------
     # WELCOME EMAIL
     # --------------------------------------------------------
 
     try:
-
         send_welcome_email(
             recipient_email=
                 user.email,
@@ -677,19 +676,15 @@ def verify_email():
                 user.name,
         )
 
-
     except Exception as email_error:
-
         print(
             "Welcome email failed:",
             email_error
         )
 
-
     return {
         "message":
             "Email verified successfully",
-
         "status":
             "success",
     }, 200
@@ -704,11 +699,40 @@ def verify_email():
     methods=["POST"],
 )
 def resend_verification():
+    """
+    Resend patient email verification OTP
+    ---
+    tags:
+      - Auth
+    consumes:
+      - application/json
+    parameters:
+      - in: body
+        name: body
+        required: true
+        schema:
+          type: object
+          required:
+            - email
+          properties:
+            email:
+              type: string
+              format: email
+              example: patient@gmail.com
+    responses:
+      200:
+        description: Verification request processed successfully
+      400:
+        description: Email is required
+      429:
+        description: Verification code requested too soon
+      503:
+        description: Unable to send verification email
+    """
 
     data = request.get_json(
         silent=True
     )
-
 
     email = str(
         (data or {}).get(
@@ -717,16 +741,13 @@ def resend_verification():
         )
     ).strip().lower()
 
-
     if not email:
         return {
             "message":
                 "Email is required",
-
             "status":
                 "error",
         }, 400
-
 
     user = (
         User.query
@@ -737,7 +758,6 @@ def resend_verification():
         .first()
     )
 
-
     if not user:
         return {
             "message": (
@@ -745,28 +765,23 @@ def resend_verification():
                 "a verification code "
                 "will be sent."
             ),
-
             "status":
                 "success",
         }, 200
-
 
     if user.email_verified:
         return {
             "message":
                 "Email is already verified",
-
             "status":
                 "success",
         }, 200
-
 
     # --------------------------------------------------------
     # 60 SECOND COOLDOWN
     # --------------------------------------------------------
 
     if user.verification_expires_at:
-
         last_sent_at = (
             user.verification_expires_at
             - timedelta(
@@ -774,23 +789,19 @@ def resend_verification():
             )
         )
 
-
         seconds_since_last_send = (
             datetime.utcnow()
             - last_sent_at
         ).total_seconds()
 
-
         if (
             seconds_since_last_send
             < 60
         ):
-
             retry_after = int(
                 60
                 - seconds_since_last_send
             ) + 1
-
 
             return {
                 "message": (
@@ -805,18 +816,15 @@ def resend_verification():
                     retry_after,
             }, 429
 
-
     verification_code = (
         generate_verification_code()
     )
-
 
     user.verification_code_hash = (
         hash_password(
             verification_code
         )
     )
-
 
     user.verification_expires_at = (
         datetime.utcnow()
@@ -825,12 +833,9 @@ def resend_verification():
         )
     )
 
-
     user.verification_attempts = 0
 
-
     try:
-
         send_verification_email(
             recipient_email=
                 user.email,
@@ -842,32 +847,25 @@ def resend_verification():
                 verification_code,
         )
 
-
         db.session.commit()
 
-
     except Exception:
-
         db.session.rollback()
-
 
         return {
             "message": (
                 "Unable to send verification "
                 "email right now"
             ),
-
             "status":
                 "error",
         }, 503
-
 
     return {
         "message": (
             "A new verification code "
             "has been sent"
         ),
-
         "status":
             "success",
     }, 200
@@ -918,7 +916,6 @@ def forgot_password():
         silent=True
     )
 
-
     email = str(
         (data or {}).get(
             "email",
@@ -926,16 +923,13 @@ def forgot_password():
         )
     ).strip().lower()
 
-
     if not email:
         return {
             "message":
                 "Email is required",
-
             "status":
                 "error",
         }, 400
-
 
     if not is_valid_email(
         email
@@ -943,11 +937,9 @@ def forgot_password():
         return {
             "message":
                 "Please enter a valid email address",
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # PATIENT / DOCTOR / RECEPTIONIST
@@ -962,18 +954,15 @@ def forgot_password():
         )
     )
 
-
     generic_response = {
         "message": (
             "If an eligible SmartClinic account "
             "exists for this email, a reset "
             "code will be sent."
         ),
-
         "status":
             "success",
     }
-
 
     if (
         not user
@@ -982,13 +971,11 @@ def forgot_password():
     ):
         return generic_response, 200
 
-
     # --------------------------------------------------------
     # 60 SECOND COOLDOWN
     # --------------------------------------------------------
 
     if user.password_reset_expires_at:
-
         last_sent_at = (
             user.password_reset_expires_at
             - timedelta(
@@ -996,50 +983,41 @@ def forgot_password():
             )
         )
 
-
         seconds_since_last_send = (
             datetime.utcnow()
             - last_sent_at
         ).total_seconds()
-
 
         if (
             0
             <= seconds_since_last_send
             < 60
         ):
-
             retry_after = int(
                 60
                 - seconds_since_last_send
             ) + 1
-
 
             return {
                 "message": (
                     "Please wait before "
                     "requesting another reset code"
                 ),
-
                 "status":
                     "error",
-
                 "retry_after":
                     retry_after,
             }, 429
 
-
     reset_code = (
         generate_verification_code()
     )
-
 
     user.password_reset_code_hash = (
         hash_password(
             reset_code
         )
     )
-
 
     user.password_reset_expires_at = (
         datetime.utcnow()
@@ -1048,19 +1026,14 @@ def forgot_password():
         )
     )
 
-
     user.password_reset_attempts = 0
-
 
     # Any old reset authorization becomes invalid.
 
     user.password_reset_token_hash = None
-
     user.password_reset_token_expires_at = None
 
-
     try:
-
         send_password_reset_email(
             recipient_email=
                 user.email,
@@ -1072,25 +1045,19 @@ def forgot_password():
                 reset_code,
         )
 
-
         db.session.commit()
 
-
     except Exception:
-
         db.session.rollback()
-
 
         return {
             "message": (
                 "Unable to send password "
                 "reset email right now"
             ),
-
             "status":
                 "error",
         }, 503
-
 
     return generic_response, 200
 
@@ -1142,16 +1109,13 @@ def verify_reset_code():
         silent=True
     )
 
-
     if not data:
         return {
             "message":
                 "Request body is required",
-
             "status":
                 "error",
         }, 400
-
 
     email = str(
         data.get(
@@ -1160,14 +1124,12 @@ def verify_reset_code():
         )
     ).strip().lower()
 
-
     code = str(
         data.get(
             "code",
             ""
         )
     ).strip()
-
 
     if (
         not email
@@ -1178,11 +1140,9 @@ def verify_reset_code():
                 "Email and reset code "
                 "are required"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if not re.fullmatch(
         r"\d{6}",
@@ -1193,18 +1153,15 @@ def verify_reset_code():
                 "Reset code must contain "
                 "exactly 6 digits"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     user = (
         get_password_reset_user(
             email
         )
     )
-
 
     if (
         not user
@@ -1214,11 +1171,9 @@ def verify_reset_code():
         return {
             "message":
                 "Invalid or expired reset code",
-
             "status":
                 "error",
         }, 400
-
 
     if (
         not user.password_reset_code_hash
@@ -1229,11 +1184,9 @@ def verify_reset_code():
                 "No active reset code. "
                 "Please request a new code."
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if (
         user.password_reset_attempts
@@ -1244,11 +1197,9 @@ def verify_reset_code():
                 "Too many incorrect attempts. "
                 "Please request a new reset code."
             ),
-
             "status":
                 "error",
         }, 429
-
 
     if (
         datetime.utcnow()
@@ -1259,30 +1210,24 @@ def verify_reset_code():
                 "Reset code has expired. "
                 "Please request a new code."
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if not check_password(
         code,
         user.password_reset_code_hash,
     ):
-
         user.password_reset_attempts += 1
 
         db.session.commit()
 
-
         return {
             "message":
                 "Incorrect reset code",
-
             "status":
                 "error",
         }, 400
-
 
     # --------------------------------------------------------
     # OTP CORRECT
@@ -1292,20 +1237,15 @@ def verify_reset_code():
         generate_reset_token()
     )
 
-
     user.password_reset_code_hash = None
-
     user.password_reset_expires_at = None
-
     user.password_reset_attempts = 0
-
 
     user.password_reset_token_hash = (
         hash_reset_token(
             reset_token
         )
     )
-
 
     user.password_reset_token_expires_at = (
         datetime.utcnow()
@@ -1314,14 +1254,11 @@ def verify_reset_code():
         )
     )
 
-
     db.session.commit()
 
-
     return {
-        "message": (
-            "Reset code verified successfully"
-        ),
+        "message":
+            "Reset code verified successfully",
 
         "status":
             "success",
@@ -1383,16 +1320,13 @@ def reset_password():
         silent=True
     )
 
-
     if not data:
         return {
             "message":
                 "Request body is required",
-
             "status":
                 "error",
         }, 400
-
 
     email = str(
         data.get(
@@ -1401,7 +1335,6 @@ def reset_password():
         )
     ).strip().lower()
 
-
     reset_token = str(
         data.get(
             "reset_token",
@@ -1409,14 +1342,12 @@ def reset_password():
         )
     ).strip()
 
-
     new_password = str(
         data.get(
             "new_password",
             ""
         )
     )
-
 
     if (
         not email
@@ -1428,11 +1359,9 @@ def reset_password():
                 "Email, reset token and "
                 "new password are required"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if len(
         new_password
@@ -1442,18 +1371,15 @@ def reset_password():
                 "Password must be at least "
                 "8 characters long"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     user = (
         get_password_reset_user(
             email
         )
     )
-
 
     if (
         not user
@@ -1463,11 +1389,9 @@ def reset_password():
         return {
             "message":
                 "Invalid password reset request",
-
             "status":
                 "error",
         }, 400
-
 
     if (
         not user.password_reset_token_hash
@@ -1478,11 +1402,9 @@ def reset_password():
                 "Password reset authorization "
                 "is missing or expired"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if (
         datetime.utcnow()
@@ -1493,18 +1415,15 @@ def reset_password():
                 "Password reset authorization "
                 "has expired"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     provided_token_hash = (
         hash_reset_token(
             reset_token
         )
     )
-
 
     if not hmac.compare_digest(
         provided_token_hash,
@@ -1513,11 +1432,9 @@ def reset_password():
         return {
             "message":
                 "Invalid password reset authorization",
-
             "status":
                 "error",
         }, 400
-
 
     if check_password(
         new_password,
@@ -1528,66 +1445,48 @@ def reset_password():
                 "New password must be different "
                 "from your current password"
             ),
-
             "status":
                 "error",
         }, 400
 
-
     try:
-
         user.password_hash = (
             hash_password(
                 new_password
             )
         )
 
-
         user.password_reset_code_hash = None
-
         user.password_reset_expires_at = None
-
         user.password_reset_attempts = 0
 
-
         user.password_reset_token_hash = None
-
         user.password_reset_token_expires_at = None
-
 
         # ----------------------------------------------------
         # STAFF PASSWORD RESET
         #
-        # Doctor/Receptionist has verified ownership
-        # through email OTP and selected a new password,
-        # therefore first-login temporary-password forcing
-        # is no longer required.
+        # Doctor/Receptionist verified ownership via OTP.
+        # Temporary-password forcing is no longer required.
         # ----------------------------------------------------
 
         if user.role in [
             "doctor",
             "receptionist",
         ]:
-
             user.must_change_password = False
-
 
         db.session.commit()
 
-
     except Exception:
-
         db.session.rollback()
-
 
         return {
             "message":
                 "Unable to reset password",
-
             "status":
                 "error",
         }, 500
-
 
     return {
         "message": (
@@ -1595,7 +1494,6 @@ def reset_password():
             "You can now login with your "
             "new password."
         ),
-
         "status":
             "success",
     }, 200
@@ -1645,28 +1543,28 @@ def change_password():
         description: Invalid current password
       403:
         description: Staff account required
+      404:
+        description: User not found
+      500:
+        description: Unable to change password
     """
 
     user_id = request.user[
         "user_id"
     ]
 
-
     user = db.session.get(
         User,
         user_id
     )
 
-
     if not user:
         return {
             "message":
                 "User not found",
-
             "status":
                 "error",
         }, 404
-
 
     # Only Doctor and Receptionist
 
@@ -1679,26 +1577,21 @@ def change_password():
                 "Password change is only "
                 "available for staff accounts"
             ),
-
             "status":
                 "error",
         }, 403
-
 
     data = request.get_json(
         silent=True
     )
 
-
     if not data:
         return {
             "message":
                 "Request body is required",
-
             "status":
                 "error",
         }, 400
-
 
     current_password = str(
         data.get(
@@ -1707,14 +1600,12 @@ def change_password():
         )
     )
 
-
     new_password = str(
         data.get(
             "new_password",
             ""
         )
     )
-
 
     if (
         not current_password
@@ -1725,11 +1616,9 @@ def change_password():
                 "Current password and "
                 "new password are required"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if len(
         new_password
@@ -1739,11 +1628,9 @@ def change_password():
                 "New password must be at least "
                 "8 characters long"
             ),
-
             "status":
                 "error",
         }, 400
-
 
     if not check_password(
         current_password,
@@ -1752,11 +1639,9 @@ def change_password():
         return {
             "message":
                 "Current password is incorrect",
-
             "status":
                 "error",
         }, 401
-
 
     if check_password(
         new_password,
@@ -1767,40 +1652,30 @@ def change_password():
                 "New password must be different "
                 "from your temporary password"
             ),
-
             "status":
                 "error",
         }, 400
 
-
     try:
-
         user.password_hash = (
             hash_password(
                 new_password
             )
         )
 
-
         user.must_change_password = False
-
 
         db.session.commit()
 
-
     except Exception:
-
         db.session.rollback()
-
 
         return {
             "message":
                 "Unable to change password",
-
             "status":
                 "error",
         }, 500
-
 
     return {
         "message":
@@ -1863,16 +1738,13 @@ def login():
         silent=True
     )
 
-
     if not data:
         return {
             "message":
                 "Email and password are required",
-
             "status":
                 "error",
         }, 400
-
 
     email = str(
         data.get(
@@ -1881,14 +1753,12 @@ def login():
         )
     ).strip().lower()
 
-
     password = str(
         data.get(
             "password",
             ""
         )
     )
-
 
     if (
         not email
@@ -1897,11 +1767,9 @@ def login():
         return {
             "message":
                 "Email and password are required",
-
             "status":
                 "error",
         }, 400
-
 
     user = (
         User.query
@@ -1911,16 +1779,13 @@ def login():
         .first()
     )
 
-
     if not user:
         return {
             "message":
                 "Invalid email or password",
-
             "status":
                 "error",
         }, 401
-
 
     if not check_password(
         password,
@@ -1929,11 +1794,9 @@ def login():
         return {
             "message":
                 "Invalid email or password",
-
             "status":
                 "error",
         }, 401
-
 
     if (
         user.status
@@ -1942,11 +1805,9 @@ def login():
         return {
             "message":
                 "Account is inactive",
-
             "status":
                 "error",
         }, 403
-
 
     if (
         user.role == "patient"
@@ -1968,12 +1829,10 @@ def login():
                 user.email,
         }, 403
 
-
     token = create_token(
         user.id,
         user.role,
     )
-
 
     return {
         "message":
@@ -2014,27 +1873,38 @@ def login():
 )
 @token_required
 def me():
+    """
+    Get currently authenticated user
+    ---
+    tags:
+      - Auth
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: User information retrieved successfully
+      401:
+        description: Unauthorized
+      404:
+        description: User not found
+    """
 
     user_id = request.user[
         "user_id"
     ]
-
 
     user = db.session.get(
         User,
         user_id
     )
 
-
     if not user:
         return {
             "message":
                 "User not found",
-
             "status":
                 "error",
         }, 404
-
 
     return {
         "message": (

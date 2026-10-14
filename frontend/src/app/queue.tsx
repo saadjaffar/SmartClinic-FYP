@@ -29,6 +29,8 @@ type QueueAppointment = {
   appointment_end_time?: string | null;
   appointment_type?: string | null;
   status?: string | null;
+  booking_source?: string | null;
+  emergency_reason?: string | null;
 };
 
 type QueueInfo = {
@@ -276,16 +278,30 @@ export default function QueueScreen() {
                   </Text>
                 </View>
 
-                <Text
-                  style={styles.timeText}
-                >
-                  {formatTimeRange(
-                    appointment.appointment_time,
-                    appointment.appointment_end_time
-                  )}
-                </Text>
+                <Text style={styles.timeText}>
+  {appointment.booking_source === "walk_in"
+    ? "Walk-In • In-Person"
+    : formatTimeRange(
+        appointment.appointment_time,
+        appointment.appointment_end_time
+      )}
+</Text>
               </View>
             </View>
+            
+            
+{appointment.booking_source === "walk_in" &&
+appointment.emergency_reason ? (
+  <View style={styles.emergencyReasonCard}>
+    <Text style={styles.emergencyReasonTitle}>
+      ⚠ Emergency Reason
+    </Text>
+
+    <Text style={styles.emergencyReasonText}>
+      {appointment.emergency_reason}
+    </Text>
+  </View>
+) : null}
 
             {/* FUTURE APPOINTMENT */}
             {!queue.queue_active ? (
@@ -1005,6 +1021,27 @@ function getInitials(
 
 const styles =
   StyleSheet.create({
+    emergencyReasonCard: {
+  marginTop: 12,
+  backgroundColor: "#FFF7ED",
+  borderWidth: 1,
+  borderColor: "#FED7AA",
+  borderRadius: 13,
+  padding: 14,
+},
+
+emergencyReasonTitle: {
+  color: "#B91C1C",
+  fontSize: 11,
+  fontWeight: "900",
+},
+
+emergencyReasonText: {
+  color: "#7C2D12",
+  fontSize: 11,
+  lineHeight: 17,
+  marginTop: 5,
+},
     screen: {
       flex: 1,
       backgroundColor: "#F5F7FA",

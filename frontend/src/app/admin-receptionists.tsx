@@ -1,5 +1,6 @@
 import React, {
   useCallback,
+  useMemo,
   useState,
 } from "react";
 
@@ -62,16 +63,13 @@ type Receptionist = {
 // ============================================================
 
 export default function AdminReceptionistsScreen() {
-
   const router =
     useRouter();
-
 
   const {
     width,
   } =
     useWindowDimensions();
-
 
   const compact =
     width < 700;
@@ -89,13 +87,11 @@ export default function AdminReceptionistsScreen() {
       Receptionist[]
     >([]);
 
-
   const [
     loading,
     setLoading,
   ] =
     useState(true);
-
 
   const [
     refreshing,
@@ -103,12 +99,19 @@ export default function AdminReceptionistsScreen() {
   ] =
     useState(false);
 
-
   const [
     error,
     setError,
   ] =
     useState("");
+
+  const [
+    updatingUserId,
+    setUpdatingUserId,
+  ] =
+    useState<
+      number | null
+    >(null);
 
 
   // =========================================================
@@ -120,7 +123,6 @@ export default function AdminReceptionistsScreen() {
     setModalVisible,
   ] =
     useState(false);
-
 
   const [
     saving,
@@ -139,20 +141,17 @@ export default function AdminReceptionistsScreen() {
   ] =
     useState("");
 
-
   const [
     email,
     setEmail,
   ] =
     useState("");
 
-
   const [
     password,
     setPassword,
   ] =
     useState("");
-
 
   const [
     showPassword,
@@ -162,25 +161,52 @@ export default function AdminReceptionistsScreen() {
 
 
   // =========================================================
+  // SUMMARY
+  // =========================================================
+
+  const activeReceptionists =
+    useMemo(
+      () =>
+        receptionists.filter(
+          (receptionist) =>
+            receptionist.status ===
+            "active"
+        ).length,
+      [
+        receptionists,
+      ]
+    );
+
+  const inactiveReceptionists =
+    useMemo(
+      () =>
+        receptionists.filter(
+          (receptionist) =>
+            receptionist.status ===
+            "inactive"
+        ).length,
+      [
+        receptionists,
+      ]
+    );
+
+
+  // =========================================================
   // LOAD RECEPTIONISTS
   // =========================================================
 
   const loadReceptionists =
     useCallback(
       async () => {
-
         try {
-
           setError(
             ""
           );
-
 
           const response =
             await apiRequest(
               "/api/admin/receptionists"
             );
-
 
           setReceptionists(
             Array.isArray(
@@ -189,18 +215,14 @@ export default function AdminReceptionistsScreen() {
               ? response.receptionists
               : []
           );
-
         } catch (
           err: any
         ) {
-
           setError(
             err?.message ||
               "Unable to load receptionists."
           );
-
         } finally {
-
           setLoading(
             false
           );
@@ -217,9 +239,7 @@ export default function AdminReceptionistsScreen() {
   useFocusEffect(
     useCallback(
       () => {
-
         loadReceptionists();
-
       },
       [
         loadReceptionists,
@@ -233,7 +253,6 @@ export default function AdminReceptionistsScreen() {
   // =========================================================
 
   const onRefresh = () => {
-
     setRefreshing(
       true
     );
@@ -247,7 +266,6 @@ export default function AdminReceptionistsScreen() {
   // =========================================================
 
   const resetForm = () => {
-
     setName(
       ""
     );
@@ -271,16 +289,15 @@ export default function AdminReceptionistsScreen() {
   // =========================================================
 
   const closeModal = () => {
-
-    if (saving) {
+    if (
+      saving
+    ) {
       return;
     }
-
 
     setModalVisible(
       false
     );
-
 
     resetForm();
   };
@@ -294,20 +311,17 @@ export default function AdminReceptionistsScreen() {
     title: string,
     message: string
   ) => {
-
     if (
       Platform.OS === "web"
       &&
       typeof window !== "undefined"
     ) {
-
       window.alert(
         `${title}\n\n${message}`
       );
 
       return;
     }
-
 
     Alert.alert(
       title,
@@ -322,16 +336,13 @@ export default function AdminReceptionistsScreen() {
 
   const handleCreateReceptionist =
     async () => {
-
       const cleanName =
         name.trim();
-
 
       const cleanEmail =
         email
           .trim()
           .toLowerCase();
-
 
       // ------------------------------------------------------
       // REQUIRED FIELDS
@@ -344,7 +355,6 @@ export default function AdminReceptionistsScreen() {
         ||
         !password
       ) {
-
         showMessage(
           "Required Fields",
           "Name, email and password are required."
@@ -361,13 +371,11 @@ export default function AdminReceptionistsScreen() {
       const emailRegex =
         /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-
       if (
         !emailRegex.test(
           cleanEmail
         )
       ) {
-
         showMessage(
           "Invalid Email",
           "Please enter a valid email address."
@@ -384,7 +392,6 @@ export default function AdminReceptionistsScreen() {
       if (
         password.length < 8
       ) {
-
         showMessage(
           "Weak Password",
           "Password must be at least 8 characters long."
@@ -399,11 +406,9 @@ export default function AdminReceptionistsScreen() {
       // ------------------------------------------------------
 
       try {
-
         setSaving(
           true
         );
-
 
         await apiRequest(
           "/api/admin/receptionists",
@@ -424,35 +429,27 @@ export default function AdminReceptionistsScreen() {
           }
         );
 
-
         setModalVisible(
           false
         );
 
-
         resetForm();
 
-
         await loadReceptionists();
-
 
         showMessage(
           "Receptionist Created",
           "Receptionist account created successfully."
         );
-
       } catch (
         err: any
       ) {
-
         showMessage(
           "Unable to Create Receptionist",
           err?.message ||
             "Please try again."
         );
-
       } finally {
-
         setSaving(
           false
         );
@@ -461,24 +458,179 @@ export default function AdminReceptionistsScreen() {
 
 
   // =========================================================
+  // UPDATE ACCOUNT STATUS
+  // =========================================================
+
+  const updateReceptionistStatus =
+    async (
+      receptionist: Receptionist
+    ) => {
+      if (
+        updatingUserId !==
+        null
+      ) {
+        return;
+      }
+
+      const newStatus =
+        receptionist.status ===
+        "active"
+          ? "inactive"
+          : "active";
+
+      try {
+        setUpdatingUserId(
+          receptionist.id
+        );
+
+        await apiRequest(
+          `/api/admin/staff/${receptionist.id}/status`,
+          {
+            method:
+              "PATCH",
+
+            body:
+              JSON.stringify({
+                status:
+                  newStatus,
+              }),
+          }
+        );
+
+        await loadReceptionists();
+
+        showMessage(
+          newStatus ===
+          "active"
+            ? "Receptionist Activated"
+            : "Receptionist Deactivated",
+
+          newStatus ===
+          "active"
+            ? `${receptionist.name}'s account is active again.`
+            : `${receptionist.name}'s account has been deactivated. Their account and history have not been deleted.`
+        );
+      } catch (
+        err: any
+      ) {
+        showMessage(
+          "Unable to Update Receptionist",
+          err?.message ||
+            "Please try again."
+        );
+      } finally {
+        setUpdatingUserId(
+          null
+        );
+      }
+    };
+
+
+  // =========================================================
+  // CONFIRM STATUS CHANGE
+  // =========================================================
+
+  const handleToggleStatus = (
+    receptionist: Receptionist
+  ) => {
+    const deactivating =
+      receptionist.status ===
+      "active";
+
+    const title =
+      deactivating
+        ? "Deactivate Receptionist"
+        : "Reactivate Receptionist";
+
+    const message =
+      deactivating
+        ? (
+          `Deactivate ${receptionist.name}?\n\n`
+          +
+          "The account will not be deleted. "
+          +
+          "The receptionist will immediately lose access to protected receptionist features."
+        )
+        : (
+          `Reactivate ${receptionist.name}?\n\n`
+          +
+          "The receptionist will be able to access the account again."
+        );
+
+
+    if (
+      Platform.OS === "web"
+      &&
+      typeof window !== "undefined"
+    ) {
+      const confirmed =
+        window.confirm(
+          `${title}\n\n${message}`
+        );
+
+      if (
+        confirmed
+      ) {
+        updateReceptionistStatus(
+          receptionist
+        );
+      }
+
+      return;
+    }
+
+
+    Alert.alert(
+      title,
+      message,
+      [
+        {
+          text:
+            "Cancel",
+
+          style:
+            "cancel",
+        },
+
+        {
+          text:
+            deactivating
+              ? "Deactivate"
+              : "Reactivate",
+
+          style:
+            deactivating
+              ? "destructive"
+              : "default",
+
+          onPress:
+            () =>
+              updateReceptionistStatus(
+                receptionist
+              ),
+        },
+      ]
+    );
+  };
+
+
+  // =========================================================
   // LOADING
   // =========================================================
 
-  if (loading) {
-
+  if (
+    loading
+  ) {
     return (
-
       <View
         style={
           styles.centerContainer
         }
       >
-
         <ActivityIndicator
           size="large"
           color="#0F766E"
         />
-
 
         <Text
           style={
@@ -487,7 +639,6 @@ export default function AdminReceptionistsScreen() {
         >
           Loading receptionists...
         </Text>
-
       </View>
     );
   }
@@ -498,20 +649,17 @@ export default function AdminReceptionistsScreen() {
   // =========================================================
 
   return (
-
     <View
       style={
         styles.screen
       }
     >
-
       <ScrollView
         contentContainerStyle={
           styles.scrollContent
         }
 
         refreshControl={
-
           <RefreshControl
             refreshing={
               refreshing
@@ -521,20 +669,17 @@ export default function AdminReceptionistsScreen() {
               onRefresh
             }
           />
-
         }
 
         showsVerticalScrollIndicator={
           false
         }
       >
-
         <View
           style={
             styles.container
           }
         >
-
           {/* =================================================
               HEADER
           ================================================= */}
@@ -544,7 +689,6 @@ export default function AdminReceptionistsScreen() {
               styles.header
             }
           >
-
             <Pressable
               onPress={
                 () =>
@@ -560,13 +704,11 @@ export default function AdminReceptionistsScreen() {
                   styles.pressed,
               ]}
             >
-
               <Ionicons
                 name="arrow-back"
                 size={20}
                 color="#0F766E"
               />
-
             </Pressable>
 
 
@@ -575,7 +717,6 @@ export default function AdminReceptionistsScreen() {
                 styles.headerContent
               }
             >
-
               <Text
                 style={
                   styles.headerTitle
@@ -584,22 +725,19 @@ export default function AdminReceptionistsScreen() {
                 Manage Receptionists
               </Text>
 
-
               <Text
                 style={
                   styles.headerSubtitle
                 }
               >
-                View and create receptionist accounts
+                Create and manage receptionist accounts
               </Text>
-
             </View>
 
 
             <Pressable
               onPress={
                 () => {
-
                   resetForm();
 
                   setModalVisible(
@@ -617,18 +755,15 @@ export default function AdminReceptionistsScreen() {
                   styles.pressed,
               ]}
             >
-
               <Ionicons
                 name="add"
                 size={18}
                 color="#FFFFFF"
               />
 
-
               {
                 !compact
                   ? (
-
                     <Text
                       style={
                         styles.addButtonText
@@ -636,13 +771,10 @@ export default function AdminReceptionistsScreen() {
                     >
                       Add Receptionist
                     </Text>
-
                   )
                   : null
               }
-
             </Pressable>
-
           </View>
 
 
@@ -652,51 +784,72 @@ export default function AdminReceptionistsScreen() {
 
           <View
             style={
-              styles.summaryCard
+              styles.summaryGrid
             }
           >
+            <SummaryCard
+              icon=
+                "desktop-outline"
 
-            <View
+              value={
+                receptionists.length
+              }
+
+              label=
+                "Registered"
+            />
+
+            <SummaryCard
+              icon=
+                "checkmark-circle-outline"
+
+              value={
+                activeReceptionists
+              }
+
+              label=
+                "Active"
+            />
+
+            <SummaryCard
+              icon=
+                "pause-circle-outline"
+
+              value={
+                inactiveReceptionists
+              }
+
+              label=
+                "Inactive"
+            />
+          </View>
+
+
+          {/* =================================================
+              INFO
+          ================================================= */}
+
+          <View
+            style={
+              styles.managementInfoCard
+            }
+          >
+            <Ionicons
+              name=
+                "information-circle-outline"
+
+              size={20}
+
+              color="#1D4ED8"
+            />
+
+            <Text
               style={
-                styles.summaryIcon
+                styles.managementInfoText
               }
             >
-
-              <Ionicons
-                name=
-                  "desktop-outline"
-
-                size={24}
-
-                color="#0F766E"
-              />
-
-            </View>
-
-
-            <View>
-
-              <Text
-                style={
-                  styles.summaryValue
-                }
-              >
-                {
-                  receptionists.length
-                }
-              </Text>
-
-
-              <Text
-                style={
-                  styles.summaryLabel
-                }
-              >
-                Registered Receptionists
-              </Text>
-
-            </View>
-
+              Deactivating a receptionist does not delete their account or clinic history. Inactive staff cannot access protected receptionist features.
+            </Text>
           </View>
 
 
@@ -707,13 +860,11 @@ export default function AdminReceptionistsScreen() {
           {
             error
               ? (
-
                 <View
                   style={
                     styles.errorCard
                   }
                 >
-
                   <Text
                     style={
                       styles.errorTitle
@@ -722,7 +873,6 @@ export default function AdminReceptionistsScreen() {
                     Unable to load receptionists
                   </Text>
 
-
                   <Text
                     style={
                       styles.errorText
@@ -730,7 +880,6 @@ export default function AdminReceptionistsScreen() {
                   >
                     {error}
                   </Text>
-
 
                   <Pressable
                     onPress={
@@ -741,7 +890,6 @@ export default function AdminReceptionistsScreen() {
                       styles.retryButton
                     }
                   >
-
                     <Text
                       style={
                         styles.retryText
@@ -749,11 +897,8 @@ export default function AdminReceptionistsScreen() {
                     >
                       Try Again
                     </Text>
-
                   </Pressable>
-
                 </View>
-
               )
               : null
           }
@@ -771,7 +916,6 @@ export default function AdminReceptionistsScreen() {
             Receptionist Accounts
           </Text>
 
-
           <Text
             style={
               styles.sectionSubtitle
@@ -782,15 +926,14 @@ export default function AdminReceptionistsScreen() {
 
 
           {
-            receptionists.length === 0
+            receptionists.length ===
+            0
               ? (
-
                 <View
                   style={
                     styles.emptyCard
                   }
                 >
-
                   <Ionicons
                     name=
                       "desktop-outline"
@@ -800,7 +943,6 @@ export default function AdminReceptionistsScreen() {
                     color="#94A3B8"
                   />
 
-
                   <Text
                     style={
                       styles.emptyTitle
@@ -809,7 +951,6 @@ export default function AdminReceptionistsScreen() {
                     No Receptionists Yet
                   </Text>
 
-
                   <Text
                     style={
                       styles.emptyText
@@ -817,17 +958,13 @@ export default function AdminReceptionistsScreen() {
                   >
                     Add your first receptionist account.
                   </Text>
-
                 </View>
-
               )
               : (
-
                 receptionists.map(
                   (
                     receptionist
                   ) => (
-
                     <ReceptionistCard
                       key={
                         receptionist.id
@@ -836,16 +973,29 @@ export default function AdminReceptionistsScreen() {
                       receptionist={
                         receptionist
                       }
-                    />
 
+                      updating={
+                        updatingUserId ===
+                        receptionist.id
+                      }
+
+                      disabled={
+                        updatingUserId !==
+                        null
+                      }
+
+                      onToggleStatus={
+                        () =>
+                          handleToggleStatus(
+                            receptionist
+                          )
+                      }
+                    />
                   )
                 )
-
               )
           }
-
         </View>
-
       </ScrollView>
 
 
@@ -866,19 +1016,16 @@ export default function AdminReceptionistsScreen() {
           closeModal
         }
       >
-
         <View
           style={
             styles.modalBackdrop
           }
         >
-
           <View
             style={
               styles.modalWrapper
             }
           >
-
             <ScrollView
               showsVerticalScrollIndicator={
                 false
@@ -887,7 +1034,6 @@ export default function AdminReceptionistsScreen() {
               keyboardShouldPersistTaps=
                 "handled"
             >
-
               {/* =============================================
                   HEADER
               ============================================= */}
@@ -897,9 +1043,7 @@ export default function AdminReceptionistsScreen() {
                   styles.modalHeader
                 }
               >
-
                 <View>
-
                   <Text
                     style={
                       styles.modalTitle
@@ -908,7 +1052,6 @@ export default function AdminReceptionistsScreen() {
                     Add Receptionist
                   </Text>
 
-
                   <Text
                     style={
                       styles.modalSubtitle
@@ -916,7 +1059,6 @@ export default function AdminReceptionistsScreen() {
                   >
                     Create a new front desk account
                   </Text>
-
                 </View>
 
 
@@ -933,15 +1075,12 @@ export default function AdminReceptionistsScreen() {
                     styles.closeButton
                   }
                 >
-
                   <Ionicons
                     name="close"
                     size={22}
                     color="#64748B"
                   />
-
                 </Pressable>
-
               </View>
 
 
@@ -956,7 +1095,6 @@ export default function AdminReceptionistsScreen() {
               >
                 Full Name *
               </Text>
-
 
               <TextInput
                 value={
@@ -994,7 +1132,6 @@ export default function AdminReceptionistsScreen() {
               >
                 Email *
               </Text>
-
 
               <TextInput
                 value={
@@ -1043,13 +1180,11 @@ export default function AdminReceptionistsScreen() {
                 Password *
               </Text>
 
-
               <View
                 style={
                   styles.passwordContainer
                 }
               >
-
                 <TextInput
                   value={
                     password
@@ -1085,7 +1220,6 @@ export default function AdminReceptionistsScreen() {
                   }
                 />
 
-
                 <Pressable
                   disabled={
                     saving
@@ -1110,7 +1244,6 @@ export default function AdminReceptionistsScreen() {
                       styles.eyePressed,
                   ]}
                 >
-
                   <Ionicons
                     name={
                       showPassword
@@ -1122,9 +1255,7 @@ export default function AdminReceptionistsScreen() {
 
                     color="#64748B"
                   />
-
                 </Pressable>
-
               </View>
 
 
@@ -1137,7 +1268,6 @@ export default function AdminReceptionistsScreen() {
                   styles.infoCard
                 }
               >
-
                 <Ionicons
                   name=
                     "information-circle-outline"
@@ -1147,7 +1277,6 @@ export default function AdminReceptionistsScreen() {
                   color="#0F766E"
                 />
 
-
                 <Text
                   style={
                     styles.infoText
@@ -1155,7 +1284,6 @@ export default function AdminReceptionistsScreen() {
                 >
                   The password created by the administrator is temporary. The receptionist will be required to change it on first login.
                 </Text>
-
               </View>
 
 
@@ -1185,20 +1313,15 @@ export default function AdminReceptionistsScreen() {
                     styles.pressed,
                 ]}
               >
-
                 {
                   saving
                     ? (
-
                       <ActivityIndicator
                         color="#FFFFFF"
                       />
-
                     )
                     : (
-
                       <>
-
                         <Ionicons
                           name=
                             "person-add-outline"
@@ -1208,7 +1331,6 @@ export default function AdminReceptionistsScreen() {
                           color="#FFFFFF"
                         />
 
-
                         <Text
                           style={
                             styles.saveButtonText
@@ -1216,22 +1338,76 @@ export default function AdminReceptionistsScreen() {
                         >
                           Create Receptionist
                         </Text>
-
                       </>
-
                     )
                 }
-
               </Pressable>
-
             </ScrollView>
-
           </View>
-
         </View>
-
       </Modal>
+    </View>
+  );
+}
 
+
+// ============================================================
+// SUMMARY CARD
+// ============================================================
+
+function SummaryCard({
+  icon,
+  value,
+  label,
+}: {
+  icon:
+    keyof typeof Ionicons.glyphMap;
+
+  value:
+    number;
+
+  label:
+    string;
+}) {
+  return (
+    <View
+      style={
+        styles.summaryCard
+      }
+    >
+      <View
+        style={
+          styles.summaryIcon
+        }
+      >
+        <Ionicons
+          name={
+            icon
+          }
+
+          size={22}
+
+          color="#0F766E"
+        />
+      </View>
+
+      <View>
+        <Text
+          style={
+            styles.summaryValue
+          }
+        >
+          {value}
+        </Text>
+
+        <Text
+          style={
+            styles.summaryLabel
+          }
+        >
+          {label}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -1243,10 +1419,22 @@ export default function AdminReceptionistsScreen() {
 
 function ReceptionistCard({
   receptionist,
+  updating,
+  disabled,
+  onToggleStatus,
 }: {
-  receptionist: Receptionist;
-}) {
+  receptionist:
+    Receptionist;
 
+  updating:
+    boolean;
+
+  disabled:
+    boolean;
+
+  onToggleStatus:
+    () => void;
+}) {
   const initials =
     receptionist.name
       .split(" ")
@@ -1265,20 +1453,28 @@ function ReceptionistCard({
       .toUpperCase();
 
 
+  const isActive =
+    receptionist.status ===
+    "active";
+
+
   return (
-
     <View
-      style={
-        styles.receptionistCard
-      }
+      style={[
+        styles.receptionistCard,
+
+        !isActive &&
+          styles.inactiveReceptionistCard,
+      ]}
     >
-
       <View
-        style={
-          styles.avatar
-        }
-      >
+        style={[
+          styles.avatar,
 
+          !isActive &&
+            styles.inactiveAvatar,
+        ]}
+      >
         <Text
           style={
             styles.avatarText
@@ -1286,7 +1482,6 @@ function ReceptionistCard({
         >
           {initials || "RC"}
         </Text>
-
       </View>
 
 
@@ -1295,19 +1490,16 @@ function ReceptionistCard({
           styles.receptionistContent
         }
       >
-
         <View
           style={
             styles.topRow
           }
         >
-
           <View
-            style={{
-              flex: 1,
-            }}
+            style={
+              styles.nameArea
+            }
           >
-
             <Text
               style={
                 styles.receptionistName
@@ -1316,7 +1508,6 @@ function ReceptionistCard({
               {receptionist.name}
             </Text>
 
-
             <Text
               style={
                 styles.roleText
@@ -1324,7 +1515,6 @@ function ReceptionistCard({
             >
               Receptionist
             </Text>
-
           </View>
 
 
@@ -1332,33 +1522,27 @@ function ReceptionistCard({
             style={[
               styles.statusBadge,
 
-              receptionist.status ===
-              "active"
+              isActive
                 ? styles.activeBadge
                 : styles.inactiveBadge,
             ]}
           >
-
             <Text
               style={[
                 styles.statusBadgeText,
 
-                receptionist.status ===
-                "active"
+                isActive
                   ? styles.activeText
                   : styles.inactiveText,
               ]}
             >
               {
-                receptionist.status ===
-                "active"
+                isActive
                   ? "Active"
                   : "Inactive"
               }
             </Text>
-
           </View>
-
         </View>
 
 
@@ -1370,9 +1554,182 @@ function ReceptionistCard({
           {receptionist.email}
         </Text>
 
-      </View>
 
+        {
+          receptionist.created_at
+            ? (
+              <Text
+                style={
+                  styles.createdText
+                }
+              >
+                Created:{" "}
+                {
+                  formatCreatedDate(
+                    receptionist.created_at
+                  )
+                }
+              </Text>
+            )
+            : null
+        }
+
+
+        <View
+          style={
+            styles.cardActions
+          }
+        >
+          <View
+            style={
+              styles.statusExplanation
+            }
+          >
+            <Ionicons
+              name={
+                isActive
+                  ? "checkmark-circle-outline"
+                  : "pause-circle-outline"
+              }
+
+              size={16}
+
+              color={
+                isActive
+                  ? "#15803D"
+                  : "#B45309"
+              }
+            />
+
+            <Text
+              style={
+                styles.statusExplanationText
+              }
+            >
+              {
+                isActive
+                  ? "Account access enabled"
+                  : "Account access disabled"
+              }
+            </Text>
+          </View>
+
+
+          <Pressable
+            onPress={
+              onToggleStatus
+            }
+
+            disabled={
+              disabled
+            }
+
+            style={({
+              pressed,
+            }) => [
+              styles.statusButton,
+
+              isActive
+                ? styles.deactivateButton
+                : styles.activateButton,
+
+              disabled &&
+                styles.disabled,
+
+              pressed &&
+                !disabled &&
+                styles.pressed,
+            ]}
+          >
+            {
+              updating
+                ? (
+                  <ActivityIndicator
+                    size="small"
+
+                    color={
+                      isActive
+                        ? "#B91C1C"
+                        : "#15803D"
+                    }
+                  />
+                )
+                : (
+                  <>
+                    <Ionicons
+                      name={
+                        isActive
+                          ? "pause-circle-outline"
+                          : "checkmark-circle-outline"
+                      }
+
+                      size={16}
+
+                      color={
+                        isActive
+                          ? "#B91C1C"
+                          : "#15803D"
+                      }
+                    />
+
+                    <Text
+                      style={[
+                        styles.statusButtonText,
+
+                        isActive
+                          ? styles.deactivateButtonText
+                          : styles.activateButtonText,
+                      ]}
+                    >
+                      {
+                        isActive
+                          ? "Deactivate"
+                          : "Reactivate"
+                      }
+                    </Text>
+                  </>
+                )
+            }
+          </Pressable>
+        </View>
+      </View>
     </View>
+  );
+}
+
+
+// ============================================================
+// CREATED DATE
+// ============================================================
+
+function formatCreatedDate(
+  value: string
+) {
+  const date =
+    new Date(
+      value
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return date.toLocaleDateString(
+    undefined,
+    {
+      day:
+        "numeric",
+
+      month:
+        "short",
+
+      year:
+        "numeric",
+    }
   );
 }
 
@@ -1383,7 +1740,6 @@ function ReceptionistCard({
 
 const styles =
   StyleSheet.create({
-
     screen: {
       flex: 1,
 
@@ -1541,7 +1897,24 @@ const styles =
     // SUMMARY
     // ========================================================
 
+    summaryGrid: {
+      flexDirection:
+        "row",
+
+      flexWrap:
+        "wrap",
+
+      gap: 10,
+
+      marginBottom: 16,
+    },
+
+
     summaryCard: {
+      flex: 1,
+
+      minWidth: 145,
+
       backgroundColor:
         "#ECFDF5",
 
@@ -1552,24 +1925,22 @@ const styles =
 
       borderRadius: 16,
 
-      padding: 16,
+      padding: 15,
 
       flexDirection:
         "row",
 
       alignItems:
         "center",
-
-      marginBottom: 22,
     },
 
 
     summaryIcon: {
-      width: 48,
+      width: 44,
 
-      height: 48,
+      height: 44,
 
-      borderRadius: 14,
+      borderRadius: 13,
 
       backgroundColor:
         "#FFFFFF",
@@ -1580,7 +1951,7 @@ const styles =
       justifyContent:
         "center",
 
-      marginRight: 13,
+      marginRight: 12,
     },
 
 
@@ -1588,7 +1959,7 @@ const styles =
       color:
         "#134E4A",
 
-      fontSize: 22,
+      fontSize: 21,
 
       fontWeight:
         "900",
@@ -1602,6 +1973,50 @@ const styles =
       fontSize: 10,
 
       marginTop: 2,
+
+      fontWeight:
+        "700",
+    },
+
+
+    // ========================================================
+    // MANAGEMENT INFO
+    // ========================================================
+
+    managementInfoCard: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "flex-start",
+
+      gap: 9,
+
+      backgroundColor:
+        "#EFF6FF",
+
+      borderWidth: 1,
+
+      borderColor:
+        "#DBEAFE",
+
+      borderRadius: 13,
+
+      padding: 13,
+
+      marginBottom: 22,
+    },
+
+
+    managementInfoText: {
+      flex: 1,
+
+      color:
+        "#475569",
+
+      fontSize: 10,
+
+      lineHeight: 16,
     },
 
 
@@ -1656,6 +2071,15 @@ const styles =
     },
 
 
+    inactiveReceptionistCard: {
+      backgroundColor:
+        "#FFFBEB",
+
+      borderColor:
+        "#FDE68A",
+    },
+
+
     avatar: {
       width: 48,
 
@@ -1673,6 +2097,12 @@ const styles =
         "center",
 
       marginRight: 13,
+    },
+
+
+    inactiveAvatar: {
+      backgroundColor:
+        "#FEF3C7",
     },
 
 
@@ -1700,6 +2130,11 @@ const styles =
         "flex-start",
 
       gap: 10,
+    },
+
+
+    nameArea: {
+      flex: 1,
     },
 
 
@@ -1737,6 +2172,16 @@ const styles =
     },
 
 
+    createdText: {
+      color:
+        "#94A3B8",
+
+      fontSize: 9,
+
+      marginTop: 4,
+    },
+
+
     statusBadge: {
       paddingHorizontal: 9,
 
@@ -1754,7 +2199,7 @@ const styles =
 
     inactiveBadge: {
       backgroundColor:
-        "#F1F5F9",
+        "#FEF3C7",
     },
 
 
@@ -1774,7 +2219,125 @@ const styles =
 
     inactiveText: {
       color:
+        "#B45309",
+    },
+
+
+    // ========================================================
+    // CARD ACTIONS
+    // ========================================================
+
+    cardActions: {
+      marginTop: 12,
+
+      paddingTop: 11,
+
+      borderTopWidth: 1,
+
+      borderTopColor:
+        "#F1F5F9",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "space-between",
+
+      flexWrap:
+        "wrap",
+
+      gap: 10,
+    },
+
+
+    statusExplanation: {
+      flex: 1,
+
+      minWidth: 150,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 6,
+    },
+
+
+    statusExplanationText: {
+      color:
         "#64748B",
+
+      fontSize: 9,
+
+      fontWeight:
+        "700",
+    },
+
+
+    statusButton: {
+      minHeight: 36,
+
+      minWidth: 112,
+
+      borderRadius: 10,
+
+      paddingHorizontal: 12,
+
+      borderWidth: 1,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 6,
+    },
+
+
+    deactivateButton: {
+      backgroundColor:
+        "#FEF2F2",
+
+      borderColor:
+        "#FECACA",
+    },
+
+
+    activateButton: {
+      backgroundColor:
+        "#F0FDF4",
+
+      borderColor:
+        "#BBF7D0",
+    },
+
+
+    statusButtonText: {
+      fontSize: 9,
+
+      fontWeight:
+        "900",
+    },
+
+
+    deactivateButtonText: {
+      color:
+        "#B91C1C",
+    },
+
+
+    activateButtonText: {
+      color:
+        "#15803D",
     },
 
 
@@ -2157,7 +2720,7 @@ const styles =
 
 
     disabled: {
-      opacity: 0.6,
+      opacity: 0.55,
     },
 
 

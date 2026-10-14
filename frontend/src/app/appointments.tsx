@@ -28,7 +28,8 @@ type Appointment = {
   specialization?: string | null;
   room_number?: string | null;
   working_hours?: string | null;
-  slot_id: number;
+  slot_id: number | null;
+  booking_source?: "scheduled" | "walk_in";
   appointment_date: string;
   appointment_time?: string | null;
   appointment_end_time?: string | null;
@@ -478,8 +479,11 @@ function AppointmentCard({
   onCancel: () => void;
 }) {
   const canCancel =
+  appointment.booking_source !== "walk_in" &&
+  (
     appointment.status === "pending" ||
-    appointment.status === "confirmed";
+    appointment.status === "confirmed"
+  );
 
   return (
     <View style={styles.appointmentCard}>

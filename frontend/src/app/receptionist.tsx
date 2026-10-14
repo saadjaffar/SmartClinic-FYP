@@ -310,6 +310,25 @@ export default function ReceptionistScreen() {
             }
           />
 
+<View
+  style={
+    styles.divider
+  }
+/>
+
+
+{/* EMERGENCY WALK-IN */}
+
+<OperationRow
+  icon="warning-outline"
+  title="Emergency Walk-In"
+  subtitle="Add an urgent registered patient directly to the queue"
+  onPress={() =>
+    router.push(
+      "/receptionist-emergency" as Href
+    )
+  }
+/>
 
           {/* LIVE QUEUE */}
 

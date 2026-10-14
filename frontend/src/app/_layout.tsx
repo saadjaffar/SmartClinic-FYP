@@ -54,6 +54,7 @@ const RECEPTIONIST_ROUTES = new Set([
   "receptionist",
   "receptionist-appointments",
   "receptionist-live-queue",
+  "receptionist-emergency",
 ]);
 
 const CHANGE_PASSWORD_ROUTE =

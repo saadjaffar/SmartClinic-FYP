@@ -20,10 +20,78 @@ doctor_bp = Blueprint(
 
 
 # ============================================================
+# SCHEDULE SLOT INVALIDATION HELPER
+# ============================================================
+
+def block_future_available_slots(
+    doctor_id,
+    day_names
+):
+    """
+    Block future unbooked slots created from an old
+    weekly schedule.
+
+    Booked appointment slots are never changed.
+    """
+
+    if isinstance(
+        day_names,
+        str
+    ):
+        day_names = {
+            day_names
+        }
+    else:
+        day_names = set(
+            day_names
+        )
+
+    today = date.today()
+
+    slots = (
+        AppointmentSlot.query
+        .filter(
+            AppointmentSlot.doctor_id
+            == doctor_id,
+
+            AppointmentSlot.slot_date
+            >= today,
+
+            AppointmentSlot.status
+            == "available"
+        )
+        .all()
+    )
+
+    blocked_count = 0
+
+    for slot in slots:
+        slot_day = (
+            slot.slot_date.strftime(
+                "%A"
+            )
+        )
+
+        if slot_day in day_names:
+            slot.status = "blocked"
+
+            slot.version = (
+                slot.version or 0
+            ) + 1
+
+            blocked_count += 1
+
+    return blocked_count
+
+
+# ============================================================
 # DOCTOR PROFILE - GET
 # ============================================================
 
-@doctor_bp.route("/profile", methods=["GET"])
+@doctor_bp.route(
+    "/profile",
+    methods=["GET"]
+)
 @token_required
 @role_required("doctor")
 def get_doctor_profile():
@@ -43,7 +111,9 @@ def get_doctor_profile():
         description: Doctor access required
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -51,8 +121,10 @@ def get_doctor_profile():
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     user = db.session.get(
@@ -61,18 +133,45 @@ def get_doctor_profile():
     )
 
     return {
-        "message": "Doctor profile retrieved successfully",
-        "status": "success",
+        "message":
+            "Doctor profile retrieved successfully",
+
+        "status":
+            "success",
+
         "doctor": {
-            "id": doctor.id,
-            "user_id": doctor.user_id,
-            "name": user.name if user else None,
-            "email": user.email if user else None,
-            "specialization": doctor.specialization,
-            "license_number": doctor.license_number,
-            "room_number": doctor.room_number,
-            "working_hours": doctor.working_hours,
-            "duty_status": doctor.duty_status
+            "id":
+                doctor.id,
+
+            "user_id":
+                doctor.user_id,
+
+            "name": (
+                user.name
+                if user
+                else None
+            ),
+
+            "email": (
+                user.email
+                if user
+                else None
+            ),
+
+            "specialization":
+                doctor.specialization,
+
+            "license_number":
+                doctor.license_number,
+
+            "room_number":
+                doctor.room_number,
+
+            "working_hours":
+                doctor.working_hours,
+
+            "duty_status":
+                doctor.duty_status
         }
     }, 200
 
@@ -81,7 +180,10 @@ def get_doctor_profile():
 # DOCTOR PROFILE - UPDATE
 # ============================================================
 
-@doctor_bp.route("/profile", methods=["PUT"])
+@doctor_bp.route(
+    "/profile",
+    methods=["PUT"]
+)
 @token_required
 @role_required("doctor")
 def update_doctor_profile():
@@ -127,7 +229,9 @@ def update_doctor_profile():
         description: Doctor access required
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -135,8 +239,10 @@ def update_doctor_profile():
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     user = db.session.get(
@@ -146,16 +252,20 @@ def update_doctor_profile():
 
     if not user:
         return {
-            "message": "User account not found",
-            "status": "error"
+            "message":
+                "User account not found",
+            "status":
+                "error"
         }, 404
 
     data = request.get_json()
 
     if not data:
         return {
-            "message": "Request body is required",
-            "status": "error"
+            "message":
+                "Request body is required",
+            "status":
+                "error"
         }, 400
 
     if "name" in data:
@@ -165,8 +275,10 @@ def update_doctor_profile():
 
         if not name:
             return {
-                "message": "Name cannot be empty",
-                "status": "error"
+                "message":
+                    "Name cannot be empty",
+                "status":
+                    "error"
             }, 400
 
         user.name = name
@@ -178,37 +290,68 @@ def update_doctor_profile():
 
         if not specialization:
             return {
-                "message": "Specialization cannot be empty",
-                "status": "error"
+                "message":
+                    "Specialization cannot be empty",
+                "status":
+                    "error"
             }, 400
 
-        doctor.specialization = specialization
+        doctor.specialization = (
+            specialization
+        )
 
     if "license_number" in data:
-        doctor.license_number = data["license_number"]
+        doctor.license_number = (
+            data["license_number"]
+        )
 
     if "room_number" in data:
-        doctor.room_number = data["room_number"]
+        doctor.room_number = (
+            data["room_number"]
+        )
 
     if "working_hours" in data:
-        doctor.working_hours = data["working_hours"]
+        doctor.working_hours = (
+            data["working_hours"]
+        )
 
     try:
         db.session.commit()
 
         return {
-            "message": "Doctor profile updated successfully",
-            "status": "success",
+            "message":
+                "Doctor profile updated successfully",
+
+            "status":
+                "success",
+
             "doctor": {
-                "id": doctor.id,
-                "user_id": doctor.user_id,
-                "name": user.name,
-                "email": user.email,
-                "specialization": doctor.specialization,
-                "license_number": doctor.license_number,
-                "room_number": doctor.room_number,
-                "working_hours": doctor.working_hours,
-                "duty_status": doctor.duty_status
+                "id":
+                    doctor.id,
+
+                "user_id":
+                    doctor.user_id,
+
+                "name":
+                    user.name,
+
+                "email":
+                    user.email,
+
+                "specialization":
+                    doctor.specialization,
+
+                "license_number":
+                    doctor.license_number,
+
+                "room_number":
+                    doctor.room_number,
+
+                "working_hours":
+                    doctor.working_hours,
+
+                "duty_status":
+                    doctor.duty_status
             }
         }, 200
 
@@ -216,8 +359,10 @@ def update_doctor_profile():
         db.session.rollback()
 
         return {
-            "message": "Failed to update doctor profile",
-            "status": "error"
+            "message":
+                "Failed to update doctor profile",
+            "status":
+                "error"
         }, 500
 
 
@@ -225,7 +370,10 @@ def update_doctor_profile():
 # DOCTOR DUTY STATUS
 # ============================================================
 
-@doctor_bp.route("/duty", methods=["PATCH"])
+@doctor_bp.route(
+    "/duty",
+    methods=["PATCH"]
+)
 @token_required
 @role_required("doctor")
 def update_duty_status():
@@ -261,7 +409,9 @@ def update_duty_status():
         description: Doctor access required
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -269,19 +419,28 @@ def update_duty_status():
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     data = request.get_json()
 
-    if not data or "duty_status" not in data:
+    if (
+        not data
+        or "duty_status" not in data
+    ):
         return {
-            "message": "duty_status is required",
-            "status": "error"
+            "message":
+                "duty_status is required",
+            "status":
+                "error"
         }, 400
 
-    duty_status = data["duty_status"]
+    duty_status = data[
+        "duty_status"
+    ]
 
     if duty_status not in [
         "on_duty",
@@ -292,7 +451,8 @@ def update_duty_status():
                 "duty_status must be "
                 "on_duty or off_duty"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     doctor.duty_status = duty_status
@@ -301,17 +461,24 @@ def update_duty_status():
         db.session.commit()
 
         return {
-            "message": "Duty status updated successfully",
-            "status": "success",
-            "duty_status": doctor.duty_status
+            "message":
+                "Duty status updated successfully",
+
+            "status":
+                "success",
+
+            "duty_status":
+                doctor.duty_status
         }, 200
 
     except Exception:
         db.session.rollback()
 
         return {
-            "message": "Failed to update duty status",
-            "status": "error"
+            "message":
+                "Failed to update duty status",
+            "status":
+                "error"
         }, 500
 
 
@@ -319,7 +486,10 @@ def update_duty_status():
 # PATIENT - GET DOCTORS
 # ============================================================
 
-@doctor_bp.route("", methods=["GET"])
+@doctor_bp.route(
+    "",
+    methods=["GET"]
+)
 @token_required
 @role_required("patient")
 def get_doctors():
@@ -361,7 +531,6 @@ def get_doctors():
     result = []
 
     for doctor in doctors:
-
         user = db.session.get(
             User,
             doctor.user_id
@@ -374,19 +543,37 @@ def get_doctors():
             continue
 
         result.append({
-            "id": doctor.id,
-            "name": user.name,
-            "specialization": doctor.specialization,
-            "room_number": doctor.room_number,
-            "working_hours": doctor.working_hours,
-            "duty_status": doctor.duty_status
+            "id":
+                doctor.id,
+
+            "name":
+                user.name,
+
+            "specialization":
+                doctor.specialization,
+
+            "room_number":
+                doctor.room_number,
+
+            "working_hours":
+                doctor.working_hours,
+
+            "duty_status":
+                doctor.duty_status
         })
 
     return {
-        "message": "Doctors retrieved successfully",
-        "status": "success",
-        "count": len(result),
-        "doctors": result
+        "message":
+            "Doctors retrieved successfully",
+
+        "status":
+            "success",
+
+        "count":
+            len(result),
+
+        "doctors":
+            result
     }, 200
 
 
@@ -394,7 +581,10 @@ def get_doctors():
 # DOCTOR SCHEDULE - GET MY SCHEDULE
 # ============================================================
 
-@doctor_bp.route("/schedule", methods=["GET"])
+@doctor_bp.route(
+    "/schedule",
+    methods=["GET"]
+)
 @token_required
 @role_required("doctor")
 def get_my_schedule():
@@ -414,7 +604,9 @@ def get_my_schedule():
         description: Doctor access required
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -422,8 +614,10 @@ def get_my_schedule():
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     day_order = {
@@ -436,10 +630,14 @@ def get_my_schedule():
         "Sunday": 7
     }
 
-    schedules = DoctorSchedule.query.filter_by(
-        doctor_id=doctor.id,
-        is_active=True
-    ).all()
+    schedules = (
+        DoctorSchedule.query
+        .filter_by(
+            doctor_id=doctor.id,
+            is_active=True
+        )
+        .all()
+    )
 
     schedules = sorted(
         schedules,
@@ -453,25 +651,41 @@ def get_my_schedule():
 
     for schedule in schedules:
         result.append({
-            "id": schedule.id,
-            "day_of_week": schedule.day_of_week,
-            "start_time": schedule.start_time.strftime(
-                "%H:%M"
+            "id":
+                schedule.id,
+
+            "day_of_week":
+                schedule.day_of_week,
+
+            "start_time": (
+                schedule.start_time
+                .strftime("%H:%M")
             ),
-            "end_time": schedule.end_time.strftime(
-                "%H:%M"
+
+            "end_time": (
+                schedule.end_time
+                .strftime("%H:%M")
             ),
-            "slot_duration_minutes": (
-                schedule.slot_duration_minutes
-            ),
-            "is_active": schedule.is_active
+
+            "slot_duration_minutes":
+                schedule.slot_duration_minutes,
+
+            "is_active":
+                schedule.is_active
         })
 
     return {
-        "message": "Doctor schedule retrieved successfully",
-        "status": "success",
-        "count": len(result),
-        "schedules": result
+        "message":
+            "Doctor schedule retrieved successfully",
+
+        "status":
+            "success",
+
+        "count":
+            len(result),
+
+        "schedules":
+            result
     }, 200
 
 
@@ -534,7 +748,9 @@ def update_schedule(schedule_id):
         description: Active schedule already exists
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -542,8 +758,10 @@ def update_schedule(schedule_id):
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     schedule = DoctorSchedule.query.filter_by(
@@ -554,28 +772,41 @@ def update_schedule(schedule_id):
 
     if not schedule:
         return {
-            "message": "Active schedule not found",
-            "status": "error"
+            "message":
+                "Active schedule not found",
+            "status":
+                "error"
         }, 404
 
     data = request.get_json()
 
     if not data:
         return {
-            "message": "Request body is required",
-            "status": "error"
+            "message":
+                "Request body is required",
+            "status":
+                "error"
         }, 400
 
     day = str(
-        data.get("day_of_week", "")
+        data.get(
+            "day_of_week",
+            ""
+        )
     ).strip()
 
     start = str(
-        data.get("start_time", "")
+        data.get(
+            "start_time",
+            ""
+        )
     ).strip()
 
     end = str(
-        data.get("end_time", "")
+        data.get(
+            "end_time",
+            ""
+        )
     ).strip()
 
     duration = data.get(
@@ -594,7 +825,8 @@ def update_schedule(schedule_id):
                 "end_time and "
                 "slot_duration_minutes are required"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     valid_days = [
@@ -609,8 +841,10 @@ def update_schedule(schedule_id):
 
     if day not in valid_days:
         return {
-            "message": "Invalid day_of_week",
-            "status": "error"
+            "message":
+                "Invalid day_of_week",
+            "status":
+                "error"
         }, 400
 
     try:
@@ -626,35 +860,46 @@ def update_schedule(schedule_id):
 
     except ValueError:
         return {
-            "message": "Time must use HH:MM format",
-            "status": "error"
+            "message":
+                "Time must use HH:MM format",
+            "status":
+                "error"
         }, 400
 
     try:
-        duration = int(duration)
+        duration = int(
+            duration
+        )
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError
+    ):
         return {
-            "message": (
-                "Slot duration must be a valid number"
-            ),
-            "status": "error"
+            "message":
+                "Slot duration must be a valid number",
+            "status":
+                "error"
         }, 400
 
     if duration <= 0:
         return {
             "message": (
-                "Slot duration must be greater than zero"
+                "Slot duration must be "
+                "greater than zero"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     if end_time <= start_time:
         return {
             "message": (
-                "End time must be later than start time"
+                "End time must be later "
+                "than start time"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     start_minutes = (
@@ -668,7 +913,8 @@ def update_schedule(schedule_id):
     )
 
     schedule_minutes = (
-        end_minutes - start_minutes
+        end_minutes
+        - start_minutes
     )
 
     if duration > schedule_minutes:
@@ -677,16 +923,24 @@ def update_schedule(schedule_id):
                 "Slot duration cannot be longer "
                 "than the schedule time"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     duplicate_schedule = (
         DoctorSchedule.query
         .filter(
-            DoctorSchedule.doctor_id == doctor.id,
-            DoctorSchedule.day_of_week == day,
-            DoctorSchedule.is_active.is_(True),
-            DoctorSchedule.id != schedule.id
+            DoctorSchedule.doctor_id
+            == doctor.id,
+
+            DoctorSchedule.day_of_week
+            == day,
+
+            DoctorSchedule.is_active
+            .is_(True),
+
+            DoctorSchedule.id
+            != schedule.id
         )
         .first()
     )
@@ -697,13 +951,47 @@ def update_schedule(schedule_id):
                 f"An active schedule already "
                 f"exists for {day}"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 409
+
+    # --------------------------------------------------------
+    # REMEMBER OLD SCHEDULE DAY
+    # --------------------------------------------------------
+
+    old_day = (
+        schedule.day_of_week
+    )
+
+    # --------------------------------------------------------
+    # UPDATE WEEKLY SCHEDULE
+    # --------------------------------------------------------
 
     schedule.day_of_week = day
     schedule.start_time = start_time
     schedule.end_time = end_time
-    schedule.slot_duration_minutes = duration
+    schedule.slot_duration_minutes = (
+        duration
+    )
+
+    # --------------------------------------------------------
+    # INVALIDATE OLD GENERATED AVAILABILITY
+    #
+    # Existing future AVAILABLE slots created from the
+    # old or new schedule day must not remain bookable.
+    #
+    # BOOKED slots are intentionally preserved.
+    # --------------------------------------------------------
+
+    blocked_future_slots = (
+        block_future_available_slots(
+            doctor.id,
+            {
+                old_day,
+                day
+            }
+        )
+    )
 
     try:
         db.session.commit()
@@ -712,24 +1000,35 @@ def update_schedule(schedule_id):
             "message": (
                 "Doctor schedule updated successfully"
             ),
-            "status": "success",
+
+            "status":
+                "success",
+
+            "blocked_future_slots":
+                blocked_future_slots,
+
             "schedule": {
-                "id": schedule.id,
-                "day_of_week": schedule.day_of_week,
+                "id":
+                    schedule.id,
+
+                "day_of_week":
+                    schedule.day_of_week,
+
                 "start_time": (
-                    schedule.start_time.strftime(
-                        "%H:%M"
-                    )
+                    schedule.start_time
+                    .strftime("%H:%M")
                 ),
+
                 "end_time": (
-                    schedule.end_time.strftime(
-                        "%H:%M"
-                    )
+                    schedule.end_time
+                    .strftime("%H:%M")
                 ),
-                "slot_duration_minutes": (
-                    schedule.slot_duration_minutes
-                ),
-                "is_active": schedule.is_active
+
+                "slot_duration_minutes":
+                    schedule.slot_duration_minutes,
+
+                "is_active":
+                    schedule.is_active
             }
         }, 200
 
@@ -737,8 +1036,10 @@ def update_schedule(schedule_id):
         db.session.rollback()
 
         return {
-            "message": "Failed to update doctor schedule",
-            "status": "error"
+            "message":
+                "Failed to update doctor schedule",
+            "status":
+                "error"
         }, 500
 
 
@@ -774,7 +1075,9 @@ def deactivate_schedule(schedule_id):
         description: Doctor access required
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -782,8 +1085,10 @@ def deactivate_schedule(schedule_id):
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     schedule = DoctorSchedule.query.filter_by(
@@ -794,11 +1099,26 @@ def deactivate_schedule(schedule_id):
 
     if not schedule:
         return {
-            "message": "Active schedule not found",
-            "status": "error"
+            "message":
+                "Active schedule not found",
+            "status":
+                "error"
         }, 404
 
     schedule.is_active = False
+
+    # --------------------------------------------------------
+    # BLOCK FUTURE UNBOOKED SLOTS
+    #
+    # Existing booked appointments remain untouched.
+    # --------------------------------------------------------
+
+    blocked_future_slots = (
+        block_future_available_slots(
+            doctor.id,
+            schedule.day_of_week
+        )
+    )
 
     try:
         db.session.commit()
@@ -807,7 +1127,12 @@ def deactivate_schedule(schedule_id):
             "message": (
                 "Doctor schedule deactivated successfully"
             ),
-            "status": "success"
+
+            "status":
+                "success",
+
+            "blocked_future_slots":
+                blocked_future_slots
         }, 200
 
     except Exception:
@@ -817,7 +1142,8 @@ def deactivate_schedule(schedule_id):
             "message": (
                 "Failed to deactivate doctor schedule"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 500
 
 
@@ -825,7 +1151,10 @@ def deactivate_schedule(schedule_id):
 # DOCTOR SCHEDULE - CREATE
 # ============================================================
 
-@doctor_bp.route("/schedule", methods=["POST"])
+@doctor_bp.route(
+    "/schedule",
+    methods=["POST"]
+)
 @token_required
 @role_required("doctor")
 def create_schedule():
@@ -875,7 +1204,9 @@ def create_schedule():
         description: Active schedule already exists
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -883,28 +1214,41 @@ def create_schedule():
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     data = request.get_json()
 
     if not data:
         return {
-            "message": "Request body is required",
-            "status": "error"
+            "message":
+                "Request body is required",
+            "status":
+                "error"
         }, 400
 
     day = str(
-        data.get("day_of_week", "")
+        data.get(
+            "day_of_week",
+            ""
+        )
     ).strip()
 
     start = str(
-        data.get("start_time", "")
+        data.get(
+            "start_time",
+            ""
+        )
     ).strip()
 
     end = str(
-        data.get("end_time", "")
+        data.get(
+            "end_time",
+            ""
+        )
     ).strip()
 
     duration = data.get(
@@ -923,7 +1267,8 @@ def create_schedule():
                 "end_time and "
                 "slot_duration_minutes are required"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     valid_days = [
@@ -938,8 +1283,10 @@ def create_schedule():
 
     if day not in valid_days:
         return {
-            "message": "Invalid day_of_week",
-            "status": "error"
+            "message":
+                "Invalid day_of_week",
+            "status":
+                "error"
         }, 400
 
     try:
@@ -955,20 +1302,28 @@ def create_schedule():
 
     except ValueError:
         return {
-            "message": "Time must use HH:MM format",
-            "status": "error"
+            "message":
+                "Time must use HH:MM format",
+            "status":
+                "error"
         }, 400
 
     try:
-        duration = int(duration)
+        duration = int(
+            duration
+        )
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError
+    ):
         return {
             "message": (
                 "Slot duration must be "
                 "a valid number"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     if duration <= 0:
@@ -977,7 +1332,8 @@ def create_schedule():
                 "Slot duration must be "
                 "greater than zero"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     if end_time <= start_time:
@@ -986,7 +1342,8 @@ def create_schedule():
                 "End time must be later "
                 "than start time"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     start_minutes = (
@@ -1010,15 +1367,18 @@ def create_schedule():
                 "Slot duration cannot be "
                 "longer than the schedule time"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     existing_schedule = (
-        DoctorSchedule.query.filter_by(
+        DoctorSchedule.query
+        .filter_by(
             doctor_id=doctor.id,
             day_of_week=day,
             is_active=True
-        ).first()
+        )
+        .first()
     )
 
     if existing_schedule:
@@ -1027,7 +1387,8 @@ def create_schedule():
                 f"An active schedule already "
                 f"exists for {day}"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 409
 
     schedule = DoctorSchedule(
@@ -1040,30 +1401,39 @@ def create_schedule():
     )
 
     try:
-        db.session.add(schedule)
+        db.session.add(
+            schedule
+        )
+
         db.session.commit()
 
         return {
             "message": (
                 "Doctor schedule created successfully"
             ),
-            "status": "success",
+
+            "status":
+                "success",
+
             "schedule": {
-                "id": schedule.id,
-                "day_of_week": schedule.day_of_week,
+                "id":
+                    schedule.id,
+
+                "day_of_week":
+                    schedule.day_of_week,
+
                 "start_time": (
-                    schedule.start_time.strftime(
-                        "%H:%M"
-                    )
+                    schedule.start_time
+                    .strftime("%H:%M")
                 ),
+
                 "end_time": (
-                    schedule.end_time.strftime(
-                        "%H:%M"
-                    )
+                    schedule.end_time
+                    .strftime("%H:%M")
                 ),
-                "slot_duration_minutes": (
+
+                "slot_duration_minutes":
                     schedule.slot_duration_minutes
-                )
             }
         }, 201
 
@@ -1071,8 +1441,10 @@ def create_schedule():
         db.session.rollback()
 
         return {
-            "message": "Failed to create doctor schedule",
-            "status": "error"
+            "message":
+                "Failed to create doctor schedule",
+            "status":
+                "error"
         }, 500
 
 
@@ -1117,14 +1489,16 @@ def generate_slots():
       404:
         description: Schedule not found
       409:
-        description: Slots already exist
+        description: Slots cannot be generated for this date
       401:
         description: Unauthorized
       403:
         description: Doctor access required
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -1132,26 +1506,35 @@ def generate_slots():
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     data = request.get_json()
 
     if not data:
         return {
-            "message": "Request body is required",
-            "status": "error"
+            "message":
+                "Request body is required",
+            "status":
+                "error"
         }, 400
 
     date_string = str(
-        data.get("date", "")
+        data.get(
+            "date",
+            ""
+        )
     ).strip()
 
     if not date_string:
         return {
-            "message": "date is required",
-            "status": "error"
+            "message":
+                "date is required",
+            "status":
+                "error"
         }, 400
 
     try:
@@ -1163,9 +1546,11 @@ def generate_slots():
     except ValueError:
         return {
             "message": (
-                "Date must use YYYY-MM-DD format"
+                "Date must use "
+                "YYYY-MM-DD format"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     # --------------------------------------------------------
@@ -1180,22 +1565,29 @@ def generate_slots():
                 "Appointment slots cannot be generated "
                 "for a past date"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     # --------------------------------------------------------
     # FIND ACTIVE WEEKLY SCHEDULE
     # --------------------------------------------------------
 
-    day_name = target_date.strftime(
-        "%A"
+    day_name = (
+        target_date.strftime(
+            "%A"
+        )
     )
 
-    schedule = DoctorSchedule.query.filter_by(
-        doctor_id=doctor.id,
-        day_of_week=day_name,
-        is_active=True
-    ).first()
+    schedule = (
+        DoctorSchedule.query
+        .filter_by(
+            doctor_id=doctor.id,
+            day_of_week=day_name,
+            is_active=True
+        )
+        .first()
+    )
 
     if not schedule:
         return {
@@ -1203,27 +1595,81 @@ def generate_slots():
                 "No active schedule found "
                 "for this day"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 404
 
     # --------------------------------------------------------
-    # PREVENT DUPLICATE SLOT GENERATION
+    # EXISTING SLOT SAFETY
+    #
+    # BOOKED:
+    # Never regenerate because a real patient appointment
+    # already exists for this date.
+    #
+    # AVAILABLE:
+    # Prevent normal duplicate generation.
+    #
+    # BLOCKED:
+    # Old schedule slots may safely be removed and replaced.
     # --------------------------------------------------------
 
-    existing_slots = (
-        AppointmentSlot.query.filter_by(
+    booked_slots_count = (
+        AppointmentSlot.query
+        .filter_by(
             doctor_id=doctor.id,
-            slot_date=target_date
-        ).count()
+            slot_date=target_date,
+            status="booked"
+        )
+        .count()
     )
 
-    if existing_slots > 0:
+    if booked_slots_count > 0:
         return {
             "message": (
-                "Slots already exist for this date"
+                "Slots cannot be regenerated because "
+                "booked appointments already exist "
+                "for this date"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 409
+
+    available_slots_count = (
+        AppointmentSlot.query
+        .filter_by(
+            doctor_id=doctor.id,
+            slot_date=target_date,
+            status="available"
+        )
+        .count()
+    )
+
+    if available_slots_count > 0:
+        return {
+            "message": (
+                "Available slots already exist "
+                "for this date"
+            ),
+            "status":
+                "error"
+        }, 409
+# --------------------------------------------------------
+# PRESERVE BLOCKED SLOTS
+#
+# Blocked slots may still be referenced by historical
+# cancelled appointments, so they must not be deleted.
+#
+# New availability will be generated as fresh slot rows.
+# --------------------------------------------------------
+    blocked_slots_count = (
+    AppointmentSlot.query
+    .filter_by(
+        doctor_id=doctor.id,
+        slot_date=target_date,
+        status="blocked"
+    )
+    .count()
+)
 
     # --------------------------------------------------------
     # INITIAL SLOT RANGE
@@ -1240,7 +1686,8 @@ def generate_slots():
     )
 
     slot_delta = timedelta(
-        minutes=schedule.slot_duration_minutes
+        minutes=
+            schedule.slot_duration_minutes
     )
 
     # --------------------------------------------------------
@@ -1248,23 +1695,24 @@ def generate_slots():
     # --------------------------------------------------------
 
     if target_date == today:
-
         now = datetime.now()
 
         while current <= now:
             current += slot_delta
 
-        # No complete future slot remains today
         if (
             current + slot_delta
             > end_datetime
         ):
+            db.session.rollback()
+
             return {
                 "message": (
                     "No future appointment slots "
                     "remain for today"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 400
 
     # --------------------------------------------------------
@@ -1277,7 +1725,6 @@ def generate_slots():
         current + slot_delta
         <= end_datetime
     ):
-
         slot_end = (
             current + slot_delta
         )
@@ -1291,20 +1738,26 @@ def generate_slots():
             version=1
         )
 
-        db.session.add(slot)
+        db.session.add(
+            slot
+        )
 
         created_slots.append({
-            "start_time": current.strftime(
-                "%H:%M"
+            "start_time": (
+                current.strftime(
+                    "%H:%M"
+                )
             ),
-            "end_time": slot_end.strftime(
-                "%H:%M"
+
+            "end_time": (
+                slot_end.strftime(
+                    "%H:%M"
+                )
             )
         })
 
         current = slot_end
 
-    # Extra safety check
     if not created_slots:
         db.session.rollback()
 
@@ -1313,7 +1766,8 @@ def generate_slots():
                 "No appointment slots could be "
                 "generated for this date"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     # --------------------------------------------------------
@@ -1330,18 +1784,31 @@ def generate_slots():
             "message": (
                 "Failed to generate appointment slots"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 500
 
     return {
         "message": (
             "Appointment slots generated successfully"
         ),
-        "status": "success",
-        "date": target_date.isoformat(),
-        "day": day_name,
-        "count": len(created_slots),
-        "slots": created_slots
+
+        "status":
+            "success",
+
+        "date":
+            target_date.isoformat(),
+
+        "day":
+            day_name,
+
+        "count":
+            len(created_slots),
+        "previous_blocked_slots":
+            blocked_slots_count,
+
+        "slots":
+            created_slots
     }, 201
 
 
@@ -1349,7 +1816,10 @@ def generate_slots():
 # DOCTOR DASHBOARD
 # ============================================================
 
-@doctor_bp.route("/dashboard", methods=["GET"])
+@doctor_bp.route(
+    "/dashboard",
+    methods=["GET"]
+)
 @token_required
 @role_required("doctor")
 def doctor_dashboard():
@@ -1371,7 +1841,9 @@ def doctor_dashboard():
         description: Doctor profile not found
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
@@ -1379,8 +1851,10 @@ def doctor_dashboard():
 
     if not doctor:
         return {
-            "message": "Doctor profile not found",
-            "status": "error"
+            "message":
+                "Doctor profile not found",
+            "status":
+                "error"
         }, 404
 
     user = db.session.get(
@@ -1389,7 +1863,6 @@ def doctor_dashboard():
     )
 
     today = date.today()
-
 
     # ========================================================
     # TODAY'S APPOINTMENTS
@@ -1425,7 +1898,6 @@ def doctor_dashboard():
         == "cancelled"
     )
 
-
     # ========================================================
     # CHECKED-IN WAITING PATIENTS ONLY
     # ========================================================
@@ -1458,7 +1930,6 @@ def doctor_dashboard():
         .count()
     )
 
-
     # ========================================================
     # CURRENT ACTIVE PATIENT
     # ========================================================
@@ -1486,13 +1957,10 @@ def doctor_dashboard():
             ])
         )
         .order_by(
-            QueueToken
-            .token_number
-            .asc()
+            QueueToken.token_number.asc()
         )
         .first()
     )
-
 
     # ========================================================
     # NEXT CHECKED-IN WAITING PATIENT
@@ -1530,7 +1998,6 @@ def doctor_dashboard():
         .first()
     )
 
-
     # ========================================================
     # RESPONSE
     # ========================================================
@@ -1540,10 +2007,12 @@ def doctor_dashboard():
             "Doctor dashboard retrieved successfully"
         ),
 
-        "status": "success",
+        "status":
+            "success",
 
         "doctor": {
-            "id": doctor.id,
+            "id":
+                doctor.id,
 
             "name": (
                 user.name

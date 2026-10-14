@@ -22,10 +22,12 @@ class Appointment(db.Model):
         nullable=False
     )
 
+    # Scheduled appointments have a slot.
+    # Emergency walk-in appointments do not require one.
     slot_id = db.Column(
         db.Integer,
         db.ForeignKey("appointment_slots.id"),
-        nullable=False
+        nullable=True
     )
 
     appointment_date = db.Column(
@@ -34,8 +36,20 @@ class Appointment(db.Model):
     )
 
     appointment_type = db.Column(
-        db.Enum("in_person", "video"),
+        db.Enum(
+            "in_person",
+            "video"
+        ),
         nullable=False
+    )
+
+    booking_source = db.Column(
+        db.Enum(
+            "scheduled",
+            "walk_in"
+        ),
+        nullable=False,
+        default="scheduled"
     )
 
     status = db.Column(

@@ -52,6 +52,7 @@ type QueueItem = {
   queue_id: number;
   appointment_id: number;
   token_number: number;
+
   priority?: string | null;
   status: string;
 
@@ -62,6 +63,9 @@ type QueueItem = {
 
   appointment_status?: string | null;
   appointment_type?: string | null;
+
+  booking_source?: string | null;
+  emergency_reason?: string | null;
 
   patient?: QueuePatient;
   doctor?: QueueDoctor;
@@ -86,17 +90,13 @@ export default function ReceptionistLiveQueueScreen() {
   const [
     queue,
     setQueue,
-  ] = useState<
-    QueueItem[]
-  >([]);
+  ] = useState<QueueItem[]>([]);
 
 
   const [
     summary,
     setSummary,
-  ] = useState<
-    QueueSummary
-  >({
+  ] = useState<QueueSummary>({
     total_checked_in: 0,
     waiting: 0,
     called: 0,
@@ -121,6 +121,14 @@ export default function ReceptionistLiveQueueScreen() {
     error,
     setError,
   ] = useState("");
+
+
+  const [
+    priorityUpdatingId,
+    setPriorityUpdatingId,
+  ] = useState<number | null>(
+    null
+  );
 
 
   // =========================================================
@@ -189,6 +197,72 @@ export default function ReceptionistLiveQueueScreen() {
 
 
   // =========================================================
+  // UPDATE PATIENT PRIORITY
+  // =========================================================
+
+  const handlePriorityToggle =
+    async (
+      item: QueueItem
+    ) => {
+
+      if (
+        item.status !== "waiting"
+      ) {
+        return;
+      }
+
+
+      if (
+        priorityUpdatingId !== null
+      ) {
+        return;
+      }
+
+
+      const nextPriority =
+        item.priority === "urgent"
+          ? "normal"
+          : "urgent";
+
+
+      try {
+        setPriorityUpdatingId(
+          item.queue_id
+        );
+
+        setError("");
+
+
+        await apiRequest(
+          `/api/receptionist/queue/${item.queue_id}/priority`,
+          {
+            method: "PATCH",
+
+            body: JSON.stringify({
+              priority:
+                nextPriority,
+            }),
+          }
+        );
+
+
+        await loadQueue();
+
+      } catch (err: any) {
+        setError(
+          err?.message ||
+            "Unable to update patient priority."
+        );
+
+      } finally {
+        setPriorityUpdatingId(
+          null
+        );
+      }
+    };
+
+
+  // =========================================================
   // LOADING
   // =========================================================
 
@@ -240,6 +314,7 @@ export default function ReceptionistLiveQueueScreen() {
           false
         }
       >
+
         {/* ================================================= */}
         {/* HEADER */}
         {/* ================================================= */}
@@ -469,8 +544,18 @@ export default function ReceptionistLiveQueueScreen() {
                 key={
                   item.queue_id
                 }
+
                 item={
                   item
+                }
+
+                priorityUpdating={
+                  priorityUpdatingId ===
+                  item.queue_id
+                }
+
+                onTogglePriority={
+                  handlePriorityToggle
                 }
               />
             )
@@ -485,6 +570,7 @@ export default function ReceptionistLiveQueueScreen() {
         >
           Pull down to refresh the latest queue status.
         </Text>
+
       </ScrollView>
     </View>
   );
@@ -502,6 +588,7 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
+
   icon:
     keyof typeof Ionicons.glyphMap;
 }) {
@@ -549,9 +636,27 @@ function SummaryCard({
 
 function QueueCard({
   item,
+  priorityUpdating,
+  onTogglePriority,
 }: {
   item: QueueItem;
+
+  priorityUpdating:
+    boolean;
+
+  onTogglePriority:
+    (
+      item: QueueItem
+    ) => void;
 }) {
+  const isUrgent =
+    item.priority === "urgent";
+
+
+  const canChangePriority =
+    item.status === "waiting";
+
+
   const patientName =
     item.patient?.name ||
     "Unknown Patient";
@@ -564,10 +669,16 @@ function QueueCard({
 
   return (
     <View
-      style={
-        styles.queueCard
-      }
+      style={[
+        styles.queueCard,
+
+        isUrgent &&
+          styles.urgentQueueCard,
+      ]}
     >
+
+      {/* TOP ROW */}
+
       <View
         style={
           styles.queueTop
@@ -628,6 +739,8 @@ function QueueCard({
       </View>
 
 
+      {/* DETAILS */}
+
       <View
         style={
           styles.detailsGrid
@@ -654,8 +767,9 @@ function QueueCard({
           icon="time-outline"
           label="Appointment"
           value={
-            item.slot?.start_time ||
-            "--:--"
+            item.booking_source === "walk_in"
+            ? "Walk-In"
+            : item.slot?.start_time || "--:--"
           }
         />
 
@@ -670,6 +784,28 @@ function QueueCard({
         />
       </View>
 
+{item.booking_source === "walk_in" &&
+item.emergency_reason ? (
+  <View style={styles.emergencyReasonCard}>
+    <View style={styles.emergencyReasonHeader}>
+      <Ionicons
+        name="warning-outline"
+        size={15}
+        color="#B91C1C"
+      />
+
+      <Text style={styles.emergencyReasonTitle}>
+        Emergency Reason
+      </Text>
+    </View>
+
+    <Text style={styles.emergencyReasonText}>
+      {item.emergency_reason}
+    </Text>
+  </View>
+) : null}
+
+      {/* STATUS + PRIORITY */}
 
       <View
         style={
@@ -698,22 +834,110 @@ function QueueCard({
 
 
         <View
-          style={
-            styles.priorityBadge
-          }
+          style={[
+            styles.priorityBadge,
+
+            isUrgent &&
+              styles.urgentPriorityBadge,
+          ]}
         >
+          {isUrgent ? (
+            <Ionicons
+              name="warning-outline"
+              size={12}
+              color="#B91C1C"
+            />
+          ) : null}
+
           <Text
-            style={
-              styles.priorityText
-            }
+            style={[
+              styles.priorityText,
+
+              isUrgent &&
+                styles.urgentPriorityText,
+            ]}
           >
-            {formatStatus(
-              item.priority ||
-                "normal"
-            )}
+            {isUrgent
+              ? "URGENT"
+              : "Normal"}
           </Text>
         </View>
       </View>
+
+
+      {/* PRIORITY ACTION */}
+
+      {canChangePriority ? (
+        <Pressable
+          disabled={
+            priorityUpdating
+          }
+          onPress={() =>
+            onTogglePriority(
+              item
+            )
+          }
+          style={({
+            pressed,
+          }) => [
+            styles.priorityActionButton,
+
+            isUrgent
+              ? styles.setNormalButton
+              : styles.markUrgentButton,
+
+            (
+              pressed ||
+              priorityUpdating
+            ) &&
+              styles.pressed,
+          ]}
+        >
+          {priorityUpdating ? (
+            <ActivityIndicator
+              size="small"
+              color={
+                isUrgent
+                  ? "#475569"
+                  : "#B91C1C"
+              }
+            />
+
+          ) : (
+            <>
+              <Ionicons
+                name={
+                  isUrgent
+                    ? "remove-circle-outline"
+                    : "warning-outline"
+                }
+                size={16}
+                color={
+                  isUrgent
+                    ? "#475569"
+                    : "#B91C1C"
+                }
+              />
+
+              <Text
+                style={[
+                  styles.priorityActionText,
+
+                  isUrgent
+                    ? styles.setNormalText
+                    : styles.markUrgentText,
+                ]}
+              >
+                {isUrgent
+                  ? "Set Priority to Normal"
+                  : "Mark as Urgent"}
+              </Text>
+            </>
+          )}
+        </Pressable>
+
+      ) : null}
+
     </View>
   );
 }
@@ -730,6 +954,7 @@ function DetailItem({
 }: {
   icon:
     keyof typeof Ionicons.glyphMap;
+
   label: string;
   value: string;
 }) {
@@ -874,402 +1099,798 @@ function formatStatus(
 
 const styles =
   StyleSheet.create({
+
+    emergencyReasonCard: {
+  backgroundColor: "#FFF7ED",
+  borderWidth: 1,
+  borderColor: "#FED7AA",
+  borderRadius: 10,
+  padding: 10,
+  marginTop: 10,
+},
+
+emergencyReasonHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 6,
+},
+
+emergencyReasonTitle: {
+  color: "#B91C1C",
+  fontSize: 9,
+  fontWeight: "900",
+},
+
+emergencyReasonText: {
+  color: "#7C2D12",
+  fontSize: 10,
+  lineHeight: 15,
+  marginTop: 5,
+},
+
     screen: {
       flex: 1,
+
       backgroundColor:
         "#F6F8FB",
     },
+
 
     container: {
       width: "100%",
+
       maxWidth: 1050,
-      alignSelf: "center",
+
+      alignSelf:
+        "center",
+
       paddingHorizontal: 18,
+
       paddingTop: 22,
+
       paddingBottom: 40,
     },
 
+
     centerContainer: {
       flex: 1,
-      alignItems: "center",
-      justifyContent: "center",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
       backgroundColor:
         "#F6F8FB",
     },
 
+
     loadingText: {
-      color: "#64748B",
+      color:
+        "#64748B",
+
       fontSize: 11,
+
       marginTop: 10,
     },
 
+
     header: {
-      flexDirection: "row",
-      alignItems: "center",
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       marginBottom: 20,
     },
 
+
     backButton: {
       width: 42,
+
       height: 42,
+
       borderRadius: 12,
+
       backgroundColor:
         "#FFFFFF",
+
       borderWidth: 1,
+
       borderColor:
         "#E5EAF0",
-      alignItems: "center",
-      justifyContent: "center",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
       marginRight: 12,
     },
+
 
     headerContent: {
       flex: 1,
     },
 
+
     headerTitle: {
-      color: "#172033",
+      color:
+        "#172033",
+
       fontSize: 21,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
 
+
     headerSubtitle: {
-      color: "#94A3B8",
+      color:
+        "#94A3B8",
+
       fontSize: 10,
+
       marginTop: 3,
     },
+
 
     liveBadge: {
       backgroundColor:
         "#DCFCE7",
+
       borderRadius: 20,
+
       paddingHorizontal: 10,
+
       paddingVertical: 7,
-      flexDirection: "row",
-      alignItems: "center",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       gap: 5,
     },
 
+
     liveDot: {
       width: 6,
+
       height: 6,
+
       borderRadius: 3,
+
       backgroundColor:
         "#16A34A",
     },
 
+
     liveText: {
-      color: "#15803D",
+      color:
+        "#15803D",
+
       fontSize: 8,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
 
+
     summaryGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
+      flexDirection:
+        "row",
+
+      flexWrap:
+        "wrap",
+
       gap: 10,
+
       marginBottom: 22,
     },
 
+
     summaryCard: {
       flexGrow: 1,
+
       minWidth: 135,
+
       backgroundColor:
         "#FFFFFF",
+
       borderWidth: 1,
+
       borderColor:
         "#E5EAF0",
+
       borderRadius: 15,
+
       padding: 13,
     },
 
+
     summaryIcon: {
       width: 34,
+
       height: 34,
+
       borderRadius: 10,
+
       backgroundColor:
         "#ECFDF5",
-      alignItems: "center",
-      justifyContent: "center",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
     },
 
+
     summaryValue: {
-      color: "#172033",
+      color:
+        "#172033",
+
       fontSize: 20,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
+
       marginTop: 8,
     },
 
+
     summaryLabel: {
-      color: "#64748B",
+      color:
+        "#64748B",
+
       fontSize: 9,
-      fontWeight: "700",
+
+      fontWeight:
+        "700",
+
       marginTop: 2,
     },
 
+
     sectionTitle: {
-      color: "#172033",
+      color:
+        "#172033",
+
       fontSize: 16,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
 
+
     sectionSubtitle: {
-      color: "#94A3B8",
+      color:
+        "#94A3B8",
+
       fontSize: 10,
+
       marginTop: 3,
+
       marginBottom: 12,
     },
+
 
     queueCard: {
       backgroundColor:
         "#FFFFFF",
+
       borderWidth: 1,
+
       borderColor:
         "#E5EAF0",
+
       borderRadius: 17,
+
       padding: 16,
+
       marginBottom: 11,
     },
 
-    queueTop: {
-      flexDirection: "row",
-      alignItems: "center",
+
+    urgentQueueCard: {
+      borderColor:
+        "#FCA5A5",
+
+      backgroundColor:
+        "#FFF7F7",
     },
+
+
+    queueTop: {
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+    },
+
 
     tokenBox: {
       width: 58,
+
       height: 52,
+
       borderRadius: 13,
+
       backgroundColor:
         "#ECFDF5",
-      alignItems: "center",
-      justifyContent: "center",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
       marginRight: 12,
     },
 
+
     tokenLabel: {
-      color: "#64748B",
+      color:
+        "#64748B",
+
       fontSize: 7,
-      fontWeight: "800",
+
+      fontWeight:
+        "800",
     },
 
+
     tokenNumber: {
-      color: "#0F766E",
+      color:
+        "#0F766E",
+
       fontSize: 17,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
+
       marginTop: 2,
     },
+
 
     patientContent: {
       flex: 1,
     },
 
+
     patientName: {
-      color: "#172033",
+      color:
+        "#172033",
+
       fontSize: 13,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
 
+
     contactText: {
-      color: "#94A3B8",
+      color:
+        "#94A3B8",
+
       fontSize: 9,
+
       marginTop: 3,
     },
 
+
     statusBadge: {
       paddingHorizontal: 9,
+
       paddingVertical: 6,
+
       borderRadius: 20,
     },
 
+
     statusText: {
       fontSize: 8,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
+
 
     waitingBadge: {
       backgroundColor:
         "#FEF3C7",
     },
 
+
     waitingText: {
-      color: "#A16207",
+      color:
+        "#A16207",
     },
+
 
     calledBadge: {
       backgroundColor:
         "#DBEAFE",
     },
 
+
     calledText: {
-      color: "#1D4ED8",
+      color:
+        "#1D4ED8",
     },
+
 
     consultingBadge: {
       backgroundColor:
         "#EDE9FE",
     },
 
+
     consultingText: {
-      color: "#6D28D9",
+      color:
+        "#6D28D9",
     },
+
 
     completedBadge: {
       backgroundColor:
         "#DCFCE7",
     },
 
+
     completedText: {
-      color: "#15803D",
+      color:
+        "#15803D",
     },
 
+
     detailsGrid: {
-      flexDirection: "row",
-      flexWrap: "wrap",
+      flexDirection:
+        "row",
+
+      flexWrap:
+        "wrap",
+
       gap: 10,
+
       marginTop: 15,
+
       paddingTop: 14,
+
       borderTopWidth: 1,
+
       borderTopColor:
         "#F1F5F9",
     },
+
 
     detailItem: {
       minWidth: 135,
+
       flexGrow: 1,
-      flexDirection: "row",
-      alignItems: "center",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
       gap: 7,
     },
 
+
     detailLabel: {
-      color: "#94A3B8",
+      color:
+        "#94A3B8",
+
       fontSize: 8,
     },
 
+
     detailValue: {
-      color: "#334155",
+      color:
+        "#334155",
+
       fontSize: 10,
-      fontWeight: "800",
+
+      fontWeight:
+        "800",
+
       marginTop: 2,
     },
 
+
     bottomRow: {
-      flexDirection: "row",
+      flexDirection:
+        "row",
+
       justifyContent:
         "space-between",
-      alignItems: "center",
+
+      alignItems:
+        "center",
+
       marginTop: 15,
+
       paddingTop: 13,
+
       borderTopWidth: 1,
+
       borderTopColor:
         "#F1F5F9",
     },
 
+
     bottomLabel: {
-      color: "#94A3B8",
+      color:
+        "#94A3B8",
+
       fontSize: 8,
     },
 
+
     bottomValue: {
-      color: "#334155",
+      color:
+        "#334155",
+
       fontSize: 10,
-      fontWeight: "800",
+
+      fontWeight:
+        "800",
+
       marginTop: 2,
     },
+
 
     priorityBadge: {
       backgroundColor:
         "#F8FAFC",
+
       borderRadius: 20,
+
       paddingHorizontal: 10,
+
       paddingVertical: 6,
     },
 
+
     priorityText: {
-      color: "#64748B",
+      color:
+        "#64748B",
+
       fontSize: 8,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
+
+
+    urgentPriorityBadge: {
+      backgroundColor:
+        "#FEE2E2",
+
+      borderWidth: 1,
+
+      borderColor:
+        "#FCA5A5",
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      gap: 4,
+    },
+
+
+    urgentPriorityText: {
+      color:
+        "#B91C1C",
+    },
+
+
+    priorityActionButton: {
+      minHeight: 42,
+
+      marginTop: 12,
+
+      borderRadius: 11,
+
+      borderWidth: 1,
+
+      flexDirection:
+        "row",
+
+      alignItems:
+        "center",
+
+      justifyContent:
+        "center",
+
+      gap: 7,
+
+      paddingHorizontal: 14,
+
+      paddingVertical: 10,
+    },
+
+
+    markUrgentButton: {
+      backgroundColor:
+        "#FEF2F2",
+
+      borderColor:
+        "#FCA5A5",
+    },
+
+
+    setNormalButton: {
+      backgroundColor:
+        "#F8FAFC",
+
+      borderColor:
+        "#CBD5E1",
+    },
+
+
+    priorityActionText: {
+      fontSize: 10,
+
+      fontWeight:
+        "900",
+    },
+
+
+    markUrgentText: {
+      color:
+        "#B91C1C",
+    },
+
+
+    setNormalText: {
+      color:
+        "#475569",
+    },
+
 
     emptyCard: {
       backgroundColor:
         "#FFFFFF",
+
       borderWidth: 1,
+
       borderColor:
         "#E5EAF0",
+
       borderRadius: 17,
+
       padding: 35,
-      alignItems: "center",
+
+      alignItems:
+        "center",
     },
 
+
     emptyTitle: {
-      color: "#334155",
+      color:
+        "#334155",
+
       fontSize: 14,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
+
       marginTop: 10,
     },
 
+
     emptyText: {
-      color: "#94A3B8",
+      color:
+        "#94A3B8",
+
       fontSize: 10,
+
       marginTop: 4,
-      textAlign: "center",
+
+      textAlign:
+        "center",
     },
+
 
     errorCard: {
       backgroundColor:
         "#FEF2F2",
+
       borderWidth: 1,
+
       borderColor:
         "#FECACA",
+
       borderRadius: 14,
+
       padding: 14,
+
       marginBottom: 18,
     },
 
+
     errorTitle: {
-      color: "#991B1B",
+      color:
+        "#991B1B",
+
       fontSize: 12,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
 
+
     errorText: {
-      color: "#B91C1C",
+      color:
+        "#B91C1C",
+
       fontSize: 10,
+
       marginTop: 4,
     },
+
 
     retryButton: {
       alignSelf:
         "flex-start",
+
       backgroundColor:
         "#FFFFFF",
+
       paddingHorizontal: 11,
+
       paddingVertical: 7,
+
       borderRadius: 8,
+
       marginTop: 9,
     },
 
+
     retryText: {
-      color: "#991B1B",
+      color:
+        "#991B1B",
+
       fontSize: 9,
-      fontWeight: "900",
+
+      fontWeight:
+        "900",
     },
 
+
     refreshHint: {
-      color: "#94A3B8",
+      color:
+        "#94A3B8",
+
       fontSize: 9,
-      textAlign: "center",
+
+      textAlign:
+        "center",
+
       marginTop: 15,
     },
 
+
     pressed: {
       opacity: 0.75,
+
       transform: [
         {
           scale: 0.99,
         },
       ],
     },
+
   });

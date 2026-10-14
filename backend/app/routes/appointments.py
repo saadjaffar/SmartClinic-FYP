@@ -9,13 +9,13 @@ from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.queue_token import QueueToken
 from app.models.user import User
-from app.utils.auth import token_required, role_required
+from app.utils.auth import role_required, token_required
 
 
 appointment_bp = Blueprint(
     "appointment",
     __name__,
-    url_prefix="/api/appointments"
+    url_prefix="/api/appointments",
 )
 
 
@@ -68,12 +68,16 @@ def get_available_slots():
         "date"
     )
 
-    if not doctor_id or not slot_date:
+    if (
+        not doctor_id
+        or not slot_date
+    ):
         return {
             "message": (
                 "doctor_id and date are required"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     try:
@@ -87,7 +91,8 @@ def get_available_slots():
             "message": (
                 "Date must use YYYY-MM-DD format"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     today = datetime.now().date()
@@ -98,7 +103,8 @@ def get_available_slots():
                 "Past appointment dates "
                 "are not available"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     doctor = db.session.get(
@@ -108,8 +114,10 @@ def get_available_slots():
 
     if not doctor:
         return {
-            "message": "Doctor not found",
-            "status": "error"
+            "message":
+                "Doctor not found",
+            "status":
+                "error"
         }, 404
 
     query = AppointmentSlot.query.filter(
@@ -145,7 +153,8 @@ def get_available_slots():
 
     for slot in slots:
         result.append({
-            "id": slot.id,
+            "id":
+                slot.id,
 
             "date": (
                 slot.slot_date.isoformat()
@@ -163,18 +172,29 @@ def get_available_slots():
                 )
             ),
 
-            "status": slot.status
+            "status":
+                slot.status
         })
 
     return {
         "message": (
             "Available slots retrieved successfully"
         ),
-        "status": "success",
-        "doctor_id": doctor_id,
-        "date": requested_date.isoformat(),
-        "count": len(result),
-        "slots": result
+
+        "status":
+            "success",
+
+        "doctor_id":
+            doctor_id,
+
+        "date":
+            requested_date.isoformat(),
+
+        "count":
+            len(result),
+
+        "slots":
+            result
     }, 200
 
 
@@ -182,7 +202,10 @@ def get_available_slots():
 # PATIENT - BOOK APPOINTMENT
 # ============================================================
 
-@appointment_bp.route("", methods=["POST"])
+@appointment_bp.route(
+    "",
+    methods=["POST"]
+)
 @token_required
 @role_required("patient")
 def book_appointment():
@@ -238,16 +261,24 @@ def book_appointment():
         description: Booking failed
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
-    patient = Patient.query.filter_by(
-        user_id=user_id
-    ).first()
+    patient = (
+        Patient.query
+        .filter_by(
+            user_id=user_id
+        )
+        .first()
+    )
 
     if not patient:
         return {
-            "message": "Patient profile not found",
-            "status": "error"
+            "message":
+                "Patient profile not found",
+            "status":
+                "error"
         }, 404
 
     data = request.get_json(
@@ -256,8 +287,10 @@ def book_appointment():
 
     if not data:
         return {
-            "message": "Request body is required",
-            "status": "error"
+            "message":
+                "Request body is required",
+            "status":
+                "error"
         }, 400
 
     doctor_id = data.get(
@@ -286,7 +319,8 @@ def book_appointment():
                 "doctor_id, slot_id and "
                 "appointment_type are required"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     if appointment_type not in [
@@ -298,11 +332,14 @@ def book_appointment():
                 "appointment_type must be "
                 "in_person or video"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 400
 
     if notes is not None:
-        notes = str(notes).strip()
+        notes = str(
+            notes
+        ).strip()
 
         if not notes:
             notes = None
@@ -328,18 +365,37 @@ def book_appointment():
             db.session.rollback()
 
             return {
-                "message": "Doctor not found",
-                "status": "error"
+                "message":
+                    "Doctor not found",
+                "status":
+                    "error"
             }, 404
 
-        if doctor.duty_status != "on_duty":
+        # ----------------------------------------------------
+        # DOCTOR ACCOUNT MUST BE ACTIVE
+        #
+        # Scheduled appointments are based on generated slots.
+        # Current duty status is reserved for live/emergency
+        # workflow and must not block future scheduled booking.
+        # ----------------------------------------------------
+
+        doctor_user = db.session.get(
+            User,
+            doctor.user_id
+        )
+
+        if (
+            not doctor_user
+            or doctor_user.status != "active"
+        ):
             db.session.rollback()
 
             return {
                 "message": (
-                    "Doctor is currently off duty"
+                    "Doctor account is not active"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 400
 
         # ----------------------------------------------------
@@ -362,8 +418,10 @@ def book_appointment():
             db.session.rollback()
 
             return {
-                "message": "Slot not found",
-                "status": "error"
+                "message":
+                    "Slot not found",
+                "status":
+                    "error"
             }, 404
 
         if slot.doctor_id != doctor.id:
@@ -374,7 +432,8 @@ def book_appointment():
                     "Selected slot does not "
                     "belong to this doctor"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 400
 
         # ----------------------------------------------------
@@ -388,7 +447,8 @@ def book_appointment():
                 "message": (
                     "This slot is no longer available"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 409
 
         # ----------------------------------------------------
@@ -408,7 +468,8 @@ def book_appointment():
                     "Past appointment slots "
                     "cannot be booked"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 400
 
         # ----------------------------------------------------
@@ -438,7 +499,8 @@ def book_appointment():
                     "You already have an "
                     "appointment for this slot"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 409
 
         # ----------------------------------------------------
@@ -478,20 +540,36 @@ def book_appointment():
         # ----------------------------------------------------
 
         appointment = Appointment(
-            patient_id=patient.id,
-            doctor_id=doctor.id,
-            slot_id=slot.id,
-            appointment_date=slot.slot_date,
-            appointment_type=appointment_type,
-            status="confirmed",
-            notes=notes
+            patient_id=
+                patient.id,
+
+            doctor_id=
+                doctor.id,
+
+            slot_id=
+                slot.id,
+
+            appointment_date=
+                slot.slot_date,
+
+            appointment_type=
+                appointment_type,
+
+            booking_source=
+                "scheduled",
+
+            status=
+                "confirmed",
+
+            notes=
+                notes
         )
 
         db.session.add(
             appointment
         )
 
-        # Need appointment ID for queue token
+        # Need appointment ID for queue token.
         db.session.flush()
 
         # ----------------------------------------------------
@@ -499,12 +577,23 @@ def book_appointment():
         # ----------------------------------------------------
 
         queue_token = QueueToken(
-            appointment_id=appointment.id,
-            doctor_id=doctor.id,
-            patient_id=patient.id,
-            token_number=next_token,
-            priority="normal",
-            status="waiting"
+            appointment_id=
+                appointment.id,
+
+            doctor_id=
+                doctor.id,
+
+            patient_id=
+                patient.id,
+
+            token_number=
+                next_token,
+
+            priority=
+                "normal",
+
+            status=
+                "waiting"
         )
 
         db.session.add(
@@ -522,21 +611,6 @@ def book_appointment():
         ) + 1
 
         # ----------------------------------------------------
-        # DOCTOR DETAILS FOR RESPONSE
-        # ----------------------------------------------------
-
-        doctor_user = db.session.get(
-            User,
-            doctor.user_id
-        )
-
-        doctor_name = (
-            doctor_user.name
-            if doctor_user
-            else None
-        )
-
-        # ----------------------------------------------------
         # COMMIT EVERYTHING TOGETHER
         # ----------------------------------------------------
 
@@ -546,26 +620,28 @@ def book_appointment():
             "message": (
                 "Appointment booked successfully"
             ),
-            "status": "success",
+
+            "status":
+                "success",
 
             "appointment": {
-                "id": appointment.id,
+                "id":
+                    appointment.id,
 
-                "doctor_id": (
-                    appointment.doctor_id
-                ),
+                "doctor_id":
+                    appointment.doctor_id,
 
-                "doctor_name": doctor_name,
+                "doctor_name":
+                    doctor_user.name,
 
-                "specialization": (
-                    doctor.specialization
-                ),
+                "specialization":
+                    doctor.specialization,
 
-                "room_number": (
-                    doctor.room_number
-                ),
+                "room_number":
+                    doctor.room_number,
 
-                "slot_id": appointment.slot_id,
+                "slot_id":
+                    appointment.slot_id,
 
                 "appointment_date": (
                     appointment
@@ -585,26 +661,23 @@ def book_appointment():
                     )
                 ),
 
-                "appointment_type": (
-                    appointment
-                    .appointment_type
-                ),
+                "appointment_type":
+                    appointment.appointment_type,
 
-                "status": (
-                    appointment.status
-                ),
+                "booking_source":
+                    appointment.booking_source,
 
-                "notes": (
-                    appointment.notes
-                ),
+                "status":
+                    appointment.status,
 
-                "queue_token": (
-                    next_token
-                ),
+                "notes":
+                    appointment.notes,
 
-                "queue_status": (
+                "queue_token":
+                    next_token,
+
+                "queue_status":
                     queue_token.status
-                )
             }
         }, 201
 
@@ -615,7 +688,8 @@ def book_appointment():
             "message": (
                 "Failed to book appointment"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 500
 
 
@@ -623,7 +697,10 @@ def book_appointment():
 # PATIENT - GET MY APPOINTMENTS
 # ============================================================
 
-@appointment_bp.route("/my", methods=["GET"])
+@appointment_bp.route(
+    "/my",
+    methods=["GET"]
+)
 @token_required
 @role_required("patient")
 def my_appointments():
@@ -645,16 +722,24 @@ def my_appointments():
         description: Patient profile not found
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
-    patient = Patient.query.filter_by(
-        user_id=user_id
-    ).first()
+    patient = (
+        Patient.query
+        .filter_by(
+            user_id=user_id
+        )
+        .first()
+    )
 
     if not patient:
         return {
-            "message": "Patient profile not found",
-            "status": "error"
+            "message":
+                "Patient profile not found",
+            "status":
+                "error"
         }, 404
 
     appointments = (
@@ -704,30 +789,35 @@ def my_appointments():
             QueueToken.query
             .filter_by(
                 appointment_id=
-                appointment.id
+                    appointment.id
             )
             .first()
         )
 
         # ----------------------------------------------------
         # SLOT DETAILS
+        #
+        # Scheduled appointments have a slot.
+        # Emergency walk-in appointments may have slot_id=NULL.
         # ----------------------------------------------------
 
-        slot = db.session.get(
-            AppointmentSlot,
-            appointment.slot_id
-        )
+        slot = None
+
+        if appointment.slot_id:
+            slot = db.session.get(
+                AppointmentSlot,
+                appointment.slot_id
+            )
 
         result.append({
-            "id": appointment.id,
+            "id":
+                appointment.id,
 
-            "doctor_id": (
-                appointment.doctor_id
-            ),
+            "doctor_id":
+                appointment.doctor_id,
 
-            "doctor_name": (
-                doctor_name
-            ),
+            "doctor_name":
+                doctor_name,
 
             "specialization": (
                 doctor.specialization
@@ -747,9 +837,8 @@ def my_appointments():
                 else None
             ),
 
-            "slot_id": (
-                appointment.slot_id
-            ),
+            "slot_id":
+                appointment.slot_id,
 
             "appointment_date": (
                 appointment
@@ -773,18 +862,17 @@ def my_appointments():
                 else None
             ),
 
-            "appointment_type": (
-                appointment
-                .appointment_type
-            ),
+            "appointment_type":
+                appointment.appointment_type,
 
-            "status": (
-                appointment.status
-            ),
+            "booking_source":
+                appointment.booking_source,
 
-            "notes": (
-                appointment.notes
-            ),
+            "status":
+                appointment.status,
+
+            "notes":
+                appointment.notes,
 
             "queue_token": (
                 queue.token_number
@@ -796,6 +884,12 @@ def my_appointments():
                 queue.status
                 if queue
                 else None
+            ),
+
+            "queue_priority": (
+                queue.priority
+                if queue
+                else None
             )
         })
 
@@ -803,9 +897,15 @@ def my_appointments():
         "message": (
             "Appointments retrieved successfully"
         ),
-        "status": "success",
-        "count": len(result),
-        "appointments": result
+
+        "status":
+            "success",
+
+        "count":
+            len(result),
+
+        "appointments":
+            result
     }, 200
 
 
@@ -850,16 +950,24 @@ def cancel_appointment(
         description: Cancellation failed
     """
 
-    user_id = request.user["user_id"]
+    user_id = request.user[
+        "user_id"
+    ]
 
-    patient = Patient.query.filter_by(
-        user_id=user_id
-    ).first()
+    patient = (
+        Patient.query
+        .filter_by(
+            user_id=user_id
+        )
+        .first()
+    )
 
     if not patient:
         return {
-            "message": "Patient profile not found",
-            "status": "error"
+            "message":
+                "Patient profile not found",
+            "status":
+                "error"
         }, 404
 
     try:
@@ -880,8 +988,10 @@ def cancel_appointment(
             db.session.rollback()
 
             return {
-                "message": "Appointment not found",
-                "status": "error"
+                "message":
+                    "Appointment not found",
+                "status":
+                    "error"
             }, 404
 
         # ----------------------------------------------------
@@ -895,9 +1005,35 @@ def cancel_appointment(
             db.session.rollback()
 
             return {
-                "message": "Access denied",
-                "status": "error"
+                "message":
+                    "Access denied",
+                "status":
+                    "error"
             }, 403
+
+        # ----------------------------------------------------
+        # WALK-IN APPOINTMENTS
+        #
+        # Emergency walk-in patients are already physically
+        # checked in at the clinic. They cannot cancel the
+        # live emergency case from the patient application.
+        # ----------------------------------------------------
+
+        if (
+            appointment.booking_source
+            == "walk_in"
+        ):
+            db.session.rollback()
+
+            return {
+                "message": (
+                    "Emergency walk-in appointments "
+                    "cannot be cancelled from "
+                    "the patient app"
+                ),
+                "status":
+                    "error"
+            }, 400
 
         # ----------------------------------------------------
         # ONLY UPCOMING CONFIRMED/PENDING APPOINTMENTS
@@ -915,7 +1051,8 @@ def cancel_appointment(
                     "This appointment "
                     "cannot be cancelled"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 400
 
         # ----------------------------------------------------
@@ -938,7 +1075,8 @@ def cancel_appointment(
                 "message": (
                     "Appointment slot not found"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 404
 
         slot_datetime = datetime.combine(
@@ -954,7 +1092,8 @@ def cancel_appointment(
                     "Past appointments "
                     "cannot be cancelled"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 400
 
         # ----------------------------------------------------
@@ -965,7 +1104,7 @@ def cancel_appointment(
             QueueToken.query
             .filter_by(
                 appointment_id=
-                appointment.id
+                    appointment.id
             )
             .with_for_update()
             .first()
@@ -973,6 +1112,7 @@ def cancel_appointment(
 
         # Once doctor has called/started the patient,
         # patient-side cancellation should not continue.
+
         if (
             queue
             and queue.status != "waiting"
@@ -984,7 +1124,8 @@ def cancel_appointment(
                     "This appointment can no "
                     "longer be cancelled"
                 ),
-                "status": "error"
+                "status":
+                    "error"
             }, 400
 
         # ----------------------------------------------------
@@ -1021,7 +1162,8 @@ def cancel_appointment(
             "message": (
                 "Appointment cancelled successfully"
             ),
-            "status": "success"
+            "status":
+                "success"
         }, 200
 
     except Exception:
@@ -1031,5 +1173,6 @@ def cancel_appointment(
             "message": (
                 "Failed to cancel appointment"
             ),
-            "status": "error"
+            "status":
+                "error"
         }, 500
