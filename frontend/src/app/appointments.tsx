@@ -100,29 +100,49 @@ export default function AppointmentsScreen() {
     loadAppointments();
   };
 
-  const upcomingAppointments = useMemo(() => {
-    return appointments
-      .filter((appointment) =>
-        [
-          "pending",
-          "confirmed",
-          "in_progress",
-        ].includes(appointment.status)
-      )
-      .sort(compareAppointmentsAscending);
-  }, [appointments]);
+ const upcomingAppointments = useMemo(() => {
+  const now = Date.now();
 
-  const historyAppointments = useMemo(() => {
-    return appointments
-      .filter((appointment) =>
-        [
-          "completed",
-          "cancelled",
-          "no_show",
-        ].includes(appointment.status)
-      )
-      .sort(compareAppointmentsDescending);
-  }, [appointments]);
+  return appointments
+    .filter((appointment) => {
+      if (appointment.status === "in_progress") {
+        return true;
+      }
+
+      const isUpcomingStatus = [
+        "pending",
+        "confirmed",
+      ].includes(appointment.status);
+
+      return (
+        isUpcomingStatus &&
+        getAppointmentTimestamp(appointment) > now
+      );
+    })
+    .sort(compareAppointmentsAscending);
+}, [appointments]);
+
+const historyAppointments = useMemo(() => {
+  const now = Date.now();
+
+  return appointments
+    .filter((appointment) => {
+      const isFinalStatus = [
+        "completed",
+        "cancelled",
+        "no_show",
+      ].includes(appointment.status);
+
+      const isExpiredAppointment =
+        ["pending", "confirmed"].includes(
+          appointment.status
+        ) &&
+        getAppointmentTimestamp(appointment) <= now;
+
+      return isFinalStatus || isExpiredAppointment;
+    })
+    .sort(compareAppointmentsDescending);
+}, [appointments]);
 
   const cancelAppointment = async (
     appointment: Appointment
@@ -478,12 +498,16 @@ function AppointmentCard({
   cancelling: boolean;
   onCancel: () => void;
 }) {
+  const isPastAppointment =
+    getAppointmentTimestamp(appointment) <= Date.now();
+
   const canCancel =
-  appointment.booking_source !== "walk_in" &&
-  (
-    appointment.status === "pending" ||
-    appointment.status === "confirmed"
-  );
+    appointment.booking_source !== "walk_in" &&
+    !isPastAppointment &&
+    (
+      appointment.status === "pending" ||
+      appointment.status === "confirmed"
+    );
 
   return (
     <View style={styles.appointmentCard}>
@@ -813,12 +837,17 @@ function getAppointmentTimestamp(
     appointment.appointment_date ||
     "1970-01-01";
 
-  const time =
+  const rawTime =
     appointment.appointment_time ||
     "00:00";
 
+  const time =
+    rawTime.split(":").length === 2
+      ? `${rawTime}:00`
+      : rawTime;
+
   return new Date(
-    `${date}T${time}:00`
+    `${date}T${time}`
   ).getTime();
 }
 
