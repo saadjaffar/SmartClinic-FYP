@@ -557,7 +557,7 @@ if (
               styles.footerText
             }
           >
-            SmartClinic FYP
+            SmartClinic
           </Text>
         </View>
       </View>
