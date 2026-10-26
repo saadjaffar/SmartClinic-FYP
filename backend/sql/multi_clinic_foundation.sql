@@ -5,7 +5,7 @@
 
 USE smartclinic;
 
-CREATE TABLE clinics (
+CREATE TABLE IF NOT EXISTS clinics (
     id INT NOT NULL AUTO_INCREMENT,
     name VARCHAR(150) NOT NULL,
     address VARCHAR(255) NULL,

@@ -7,3 +7,4 @@ from app.models.queue_token import QueueToken
 from app.models.doctor_schedule import DoctorSchedule
 from app.models.consultation import Consultation
 from app.models.clinic import Clinic
+from app.models.clinic_staff_membership import ClinicStaffMembership
