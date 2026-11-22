@@ -6,6 +6,7 @@ import {
   clearAuth,
   getToken,
 } from "../storage/authStorage";
+import { getSelectedClinicId } from "../storage/clinicStorage";
 
 
 // ============================================================
@@ -124,6 +125,9 @@ export async function apiRequest(
   const token =
     await getToken();
 
+  const clinicId =
+    await getSelectedClinicId();
+
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -132,6 +136,10 @@ export async function apiRequest(
       | Record<string, string>
       | undefined),
   };
+
+  if (clinicId) {
+    headers["X-Clinic-Id"] = String(clinicId);
+  }
 
 
   if (token) {

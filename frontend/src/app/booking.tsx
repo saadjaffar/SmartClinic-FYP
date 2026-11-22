@@ -38,18 +38,24 @@ export default function BookingScreen() {
   const params = useLocalSearchParams<{
     doctorId?: string;
     doctorName?: string;
+    clinicId?: string;
+    clinicName?: string;
     specialization?: string;
     roomNumber?: string;
     workingHours?: string;
   }>();
 
   const doctorId = Number(params.doctorId);
+  const clinicId = Number(params.clinicId);
 
   const doctorName =
     params.doctorName || "Doctor";
 
   const specialization =
     params.specialization || "Medical Specialist";
+
+  const clinicName =
+    params.clinicName || "Clinic";
 
   const roomNumber =
     params.roomNumber || "Not assigned";
@@ -87,7 +93,7 @@ export default function BookingScreen() {
     useState("");
 
   const loadSlots = useCallback(async () => {
-    if (!doctorId || !selectedDate) {
+    if (!doctorId || !clinicId || !selectedDate) {
       return;
     }
 
@@ -97,9 +103,7 @@ export default function BookingScreen() {
       setSelectedSlotId(null);
 
       const response = await apiRequest(
-        `/api/appointments/slots?doctor_id=${doctorId}&date=${encodeURIComponent(
-          selectedDate
-        )}`
+        `/api/appointments/slots?doctor_id=${doctorId}&clinic_id=${clinicId}&date=${encodeURIComponent(selectedDate)}`
       );
 
       let slotList: AppointmentSlot[] =
@@ -134,14 +138,14 @@ export default function BookingScreen() {
     } finally {
       setSlotsLoading(false);
     }
-  }, [doctorId, selectedDate]);
+  }, [clinicId, doctorId, selectedDate]);
 
   useEffect(() => {
     loadSlots();
   }, [loadSlots]);
 
   async function handleBooking() {
-    if (!doctorId) {
+    if (!doctorId || !clinicId) {
       Alert.alert(
         "Doctor Missing",
         "Please select a doctor again."
@@ -166,6 +170,7 @@ export default function BookingScreen() {
           method: "POST",
           body: JSON.stringify({
             doctor_id: doctorId,
+            clinic_id: clinicId,
             slot_id: selectedSlotId,
             appointment_type: appointmentType,
             notes: notes.trim() || null,
@@ -274,6 +279,9 @@ Alert.alert(
 
             <Text style={styles.specialization}>
               {specialization}
+            </Text>
+            <Text style={styles.clinicName}>
+              {clinicName}
             </Text>
 
             <View style={styles.doctorMetaRow}>
@@ -931,6 +939,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     marginTop: 3,
+  },
+  clinicName: {
+    color: "#475569",
+    fontSize: 14,
+    marginTop: 5,
   },
 
   doctorMetaRow: {

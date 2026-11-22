@@ -36,6 +36,7 @@ class User(db.Model):
             "patient",
             "doctor",
             "receptionist",
+            "clinic_admin",
             "admin"
         ),
         nullable=False

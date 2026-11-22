@@ -256,3 +256,84 @@ Clinic Management System
         subject,
         body
     )
+
+
+def send_clinic_admin_account_email(
+    recipient_email,
+    recipient_name,
+    clinic_name,
+    temporary_password
+):
+    subject = "Your SmartClinic Clinic Admin Account"
+    body = f"""
+Hello {recipient_name},
+
+A Clinic Admin account has been created for you.
+
+Clinic: {clinic_name}
+Email: {recipient_email}
+Temporary password: {temporary_password}
+
+Sign in to SmartClinic and change this temporary
+password before accessing clinic administration.
+
+If you were not expecting this account, contact
+the SmartClinic platform administrator.
+
+SmartClinic
+Clinic Management System
+    """.strip()
+
+    _send_email(
+        recipient_email,
+        subject,
+        body
+    )
+
+
+def send_doctor_clinic_invitation_email(
+    recipient_email,
+    recipient_name,
+    clinic_name,
+    approval_url,
+    temporary_password=None
+):
+    credentials = ""
+    if temporary_password:
+        credentials = f"""
+Email: {recipient_email}
+Temporary password: {temporary_password}
+
+After approving the clinic invitation, sign in and
+change the temporary password on your first login.
+"""
+    else:
+        credentials = f"""
+Use your existing SmartClinic account to sign in.
+Your current password will not be changed.
+"""
+
+    subject = f"SmartClinic doctor invitation: {clinic_name}"
+    body = f"""
+Hello {recipient_name},
+
+{clinic_name} has invited you to join its SmartClinic
+doctor team. Review and approve the invitation here:
+
+{approval_url}
+
+This one-time approval link expires in 7 days.
+
+{credentials}
+If you were not expecting this invitation, you can
+ignore this email.
+
+SmartClinic
+Clinic Management System
+    """.strip()
+
+    _send_email(
+        recipient_email,
+        subject,
+        body
+    )

@@ -24,6 +24,7 @@ type QueueAppointment = {
   doctor_name?: string | null;
   specialization?: string | null;
   room_number?: string | null;
+  clinic_name?: string | null;
   appointment_date: string;
   appointment_time?: string | null;
   appointment_end_time?: string | null;
@@ -249,6 +250,12 @@ export default function QueueScreen() {
                   {appointment.specialization ||
                     "Medical Consultation"}
                 </Text>
+
+                {appointment.clinic_name ? (
+                  <Text style={styles.specialization}>
+                    {appointment.clinic_name}
+                  </Text>
+                ) : null}
 
                 <View
                   style={

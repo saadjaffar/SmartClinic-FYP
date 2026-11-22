@@ -20,6 +20,8 @@ type Doctor = {
   room_number?: string | null;
   working_hours?: string | null;
   duty_status: "on_duty" | "off_duty";
+  clinic_id: number;
+  clinic_name: string;
 };
 
 export default function DoctorsScreen() {
@@ -109,16 +111,14 @@ export default function DoctorsScreen() {
   );
 
   const openBooking = (doctor: Doctor) => {
-    if (doctor.duty_status !== "on_duty") {
-      return;
-    }
-
     router.push({
       pathname: "/booking" as any,
       params: {
         doctorId: String(doctor.id),
         doctorName: doctor.name,
         specialization: doctor.specialization,
+        clinicId: String(doctor.clinic_id),
+        clinicName: doctor.clinic_name,
         roomNumber: doctor.room_number ?? "",
         workingHours: doctor.working_hours ?? "",
       },
@@ -319,7 +319,7 @@ export default function DoctorsScreen() {
 
                   {onDutyDoctors.map((doctor) => (
                     <DoctorCard
-                      key={doctor.id}
+                      key={`${doctor.id}-${doctor.clinic_id}`}
                       doctor={doctor}
                       onPress={() =>
                         openBooking(doctor)
@@ -338,7 +338,7 @@ export default function DoctorsScreen() {
 
                   {offDutyDoctors.map((doctor) => (
                     <DoctorCard
-                      key={doctor.id}
+                      key={`${doctor.id}-${doctor.clinic_id}`}
                       doctor={doctor}
                       onPress={() => {}}
                     />
@@ -423,6 +423,9 @@ function DoctorCard({
             {doctor.specialization ||
               "General Medicine"}
           </Text>
+          <Text style={styles.clinicName}>
+            {doctor.clinic_name}
+          </Text>
         </View>
       </View>
 
@@ -444,29 +447,21 @@ function DoctorCard({
         />
       </View>
 
-      {onDuty ? (
-        <Pressable
-          onPress={onPress}
-          style={({ pressed }) => [
-            styles.bookButton,
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={styles.bookButtonText}>
-            Book Appointment
-          </Text>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [
+          styles.bookButton,
+          pressed && styles.pressed,
+        ]}
+      >
+        <Text style={styles.bookButtonText}>
+          View Appointment Slots
+        </Text>
 
-          <Text style={styles.bookArrow}>
-            →
-          </Text>
-        </Pressable>
-      ) : (
-        <View style={styles.unavailableButton}>
-          <Text style={styles.unavailableText}>
-            Currently unavailable
-          </Text>
-        </View>
-      )}
+        <Text style={styles.bookArrow}>
+          →
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -737,6 +732,11 @@ const styles = StyleSheet.create({
     color: "#0F766E",
     fontSize: 13,
     fontWeight: "600",
+    marginTop: 4,
+  },
+  clinicName: {
+    color: "#475569",
+    fontSize: 13,
     marginTop: 4,
   },
 

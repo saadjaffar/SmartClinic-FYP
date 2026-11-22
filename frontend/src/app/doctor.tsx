@@ -22,6 +22,16 @@ import { apiRequest } from "../api/client";
 import {
   clearAuth,
 } from "../storage/authStorage";
+import {
+  getSelectedClinicId,
+  setSelectedClinicId,
+} from "../storage/clinicStorage";
+
+type DoctorClinic = {
+  clinic_id: number;
+  clinic_name: string;
+  status: string;
+};
 
 type DoctorInfo = {
   id: number;
@@ -84,10 +94,49 @@ export default function DoctorScreen() {
   const [error, setError] =
     useState("");
 
+  const [clinics, setClinics] =
+    useState<DoctorClinic[]>([]);
+
+  const [selectedClinicId, setSelectedClinicIdState] =
+    useState<number | null>(null);
+
   const loadDashboard = useCallback(
     async () => {
       try {
         setError("");
+
+        const clinicResponse =
+          await apiRequest("/api/clinics/my");
+        const availableClinics: DoctorClinic[] =
+          Array.isArray(clinicResponse?.clinics)
+            ? clinicResponse.clinics.filter(
+                (item: DoctorClinic) =>
+                  item.status === "active"
+              )
+            : [];
+        setClinics(availableClinics);
+
+        const storedClinicId =
+          await getSelectedClinicId();
+        const clinicId = availableClinics.some(
+          (item) => item.clinic_id === storedClinicId
+        )
+          ? storedClinicId
+          : availableClinics[0]?.clinic_id ?? null;
+
+        if (!clinicId) {
+          setSelectedClinicIdState(null);
+          setDoctor(null);
+          setToday(null);
+          setQueue(null);
+          setError(
+            "You do not have an approved clinic assignment yet."
+          );
+          return;
+        }
+
+        await setSelectedClinicId(clinicId);
+        setSelectedClinicIdState(clinicId);
 
         const response: DashboardResponse =
           await apiRequest(
@@ -117,6 +166,12 @@ export default function DoctorScreen() {
     },
     []
   );
+
+  const handleClinicSelect = async (clinicId: number) => {
+    await setSelectedClinicId(clinicId);
+    setSelectedClinicIdState(clinicId);
+    await loadDashboard();
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -394,6 +449,54 @@ export default function DoctorScreen() {
         </View>
 
         <View style={styles.content}>
+          {clinics.length > 1 ? (
+            <View style={styles.clinicPicker}>
+              <Text style={styles.clinicPickerLabel}>
+                CURRENT CLINIC
+              </Text>
+              <View style={styles.clinicOptions}>
+                {clinics.map((clinic) => (
+                  <Pressable
+                    key={clinic.clinic_id}
+                    onPress={() =>
+                      handleClinicSelect(clinic.clinic_id)
+                    }
+                    style={[
+                      styles.clinicOption,
+                      clinic.clinic_id === selectedClinicId &&
+                        styles.clinicOptionSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.clinicOptionText,
+                        clinic.clinic_id === selectedClinicId &&
+                          styles.clinicOptionTextSelected,
+                      ]}
+                    >
+                      {clinic.clinic_name}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text style={styles.currentClinicName}>
+                {clinics.find(
+                  (clinic) =>
+                    clinic.clinic_id === selectedClinicId
+                )?.clinic_name || "Choose a clinic"}
+              </Text>
+            </View>
+          ) : clinics[0] ? (
+            <View style={styles.clinicPicker}>
+              <Text style={styles.clinicPickerLabel}>
+                CURRENT CLINIC
+              </Text>
+              <Text style={styles.currentClinicName}>
+                {clinics[0].clinic_name}
+              </Text>
+            </View>
+          ) : null}
+
           {/* ERROR */}
           {error ? (
             <View
@@ -1089,6 +1192,51 @@ const styles = StyleSheet.create({
     paddingTop: 55,
     paddingBottom: 25,
     paddingHorizontal: 20,
+  },
+  clinicPicker: {
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  clinicPickerLabel: {
+    color: "#0F766E",
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  clinicOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 9,
+  },
+  clinicOption: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: "#99F6E4",
+    borderRadius: 9,
+    backgroundColor: "#FFFFFF",
+  },
+  clinicOptionSelected: {
+    backgroundColor: "#0F766E",
+    borderColor: "#0F766E",
+  },
+  clinicOptionText: {
+    color: "#134E4A",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  clinicOptionTextSelected: {
+    color: "#FFFFFF",
+  },
+  currentClinicName: {
+    color: "#134E4A",
+    fontSize: 16,
+    fontWeight: "900",
+    marginTop: 8,
   },
 
   headerTop: {

@@ -1082,10 +1082,11 @@ function CurrentPatientCard({
             }
 
             {
-              patient.priority ===
-              "urgent"
-                ? "  •  ⚠ URGENT"
-                : ""
+              patient.priority === "critical"
+                ? "  •  ⚠ CRITICAL"
+                : patient.priority === "urgent"
+                  ? "  •  ⚠ URGENT"
+                  : ""
             }
           </Text>
 
@@ -1419,10 +1420,11 @@ function WaitingPatientCard({
           }
 
           {
-            patient.priority ===
-            "urgent"
-              ? "  •  ⚠ URGENT"
-              : ""
+            patient.priority === "critical"
+              ? "  •  ⚠ CRITICAL"
+              : patient.priority === "urgent"
+                ? "  •  ⚠ URGENT"
+                : ""
           }
         </Text>
 

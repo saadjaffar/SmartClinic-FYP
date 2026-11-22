@@ -77,6 +77,10 @@ function getHomeRoute(
     return "/receptionist";
   }
 
+  if (role === "clinic_admin") {
+    return "/clinic-admin";
+  }
+
   return "/";
 }
 

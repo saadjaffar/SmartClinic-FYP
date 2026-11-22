@@ -22,6 +22,13 @@ class Appointment(db.Model):
         nullable=False
     )
 
+    clinic_id = db.Column(
+        db.Integer,
+        db.ForeignKey("clinics.id"),
+        nullable=False,
+        index=True
+    )
+
     # Scheduled appointments have a slot.
     # Emergency walk-in appointments do not require one.
     slot_id = db.Column(

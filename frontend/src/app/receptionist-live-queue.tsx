@@ -53,7 +53,7 @@ type QueueItem = {
   appointment_id: number;
   token_number: number;
 
-  priority?: string | null;
+  priority?: "normal" | "urgent" | "critical" | null;
   status: string;
 
   check_in_time?: string | null;
@@ -219,10 +219,18 @@ export default function ReceptionistLiveQueueScreen() {
       }
 
 
+      const priorityOrder = [
+        "normal",
+        "urgent",
+        "critical",
+      ];
+      const currentIndex = priorityOrder.indexOf(
+        item.priority || "normal"
+      );
       const nextPriority =
-        item.priority === "urgent"
-          ? "normal"
-          : "urgent";
+        priorityOrder[
+          (currentIndex + 1) % priorityOrder.length
+        ];
 
 
       try {
@@ -651,6 +659,10 @@ function QueueCard({
 }) {
   const isUrgent =
     item.priority === "urgent";
+  const isCritical =
+    item.priority === "critical";
+  const hasElevatedPriority =
+    isUrgent || isCritical;
 
 
   const canChangePriority =
@@ -674,6 +686,8 @@ function QueueCard({
 
         isUrgent &&
           styles.urgentQueueCard,
+        isCritical &&
+          styles.criticalQueueCard,
       ]}
     >
 
@@ -839,9 +853,11 @@ item.emergency_reason ? (
 
             isUrgent &&
               styles.urgentPriorityBadge,
+            isCritical &&
+              styles.criticalPriorityBadge,
           ]}
         >
-          {isUrgent ? (
+          {hasElevatedPriority ? (
             <Ionicons
               name="warning-outline"
               size={12}
@@ -855,11 +871,11 @@ item.emergency_reason ? (
 
               isUrgent &&
                 styles.urgentPriorityText,
+              isCritical &&
+                styles.criticalPriorityText,
             ]}
           >
-            {isUrgent
-              ? "URGENT"
-              : "Normal"}
+            {item.priority || "Normal"}
           </Text>
         </View>
       </View>
@@ -882,7 +898,7 @@ item.emergency_reason ? (
           }) => [
             styles.priorityActionButton,
 
-            isUrgent
+            isCritical
               ? styles.setNormalButton
               : styles.markUrgentButton,
 
@@ -896,41 +912,31 @@ item.emergency_reason ? (
           {priorityUpdating ? (
             <ActivityIndicator
               size="small"
-              color={
-                isUrgent
-                  ? "#475569"
-                  : "#B91C1C"
-              }
+              color={isCritical ? "#475569" : "#B91C1C"}
             />
 
           ) : (
             <>
               <Ionicons
-                name={
-                  isUrgent
-                    ? "remove-circle-outline"
-                    : "warning-outline"
-                }
+                name={isCritical ? "remove-circle-outline" : "warning-outline"}
                 size={16}
-                color={
-                  isUrgent
-                    ? "#475569"
-                    : "#B91C1C"
-                }
+                color={isCritical ? "#475569" : "#B91C1C"}
               />
 
               <Text
                 style={[
                   styles.priorityActionText,
 
-                  isUrgent
+                  isCritical
                     ? styles.setNormalText
                     : styles.markUrgentText,
                 ]}
               >
-                {isUrgent
+                {isCritical
                   ? "Set Priority to Normal"
-                  : "Mark as Urgent"}
+                  : item.priority === "urgent"
+                    ? "Escalate to Critical"
+                    : "Mark as Urgent"}
               </Text>
             </>
           )}
@@ -1405,6 +1411,11 @@ emergencyReasonText: {
         "#FFF7F7",
     },
 
+    criticalQueueCard: {
+      borderColor: "#C4B5FD",
+      backgroundColor: "#FAF5FF",
+    },
+
 
     queueTop: {
       flexDirection:
@@ -1693,6 +1704,15 @@ emergencyReasonText: {
     urgentPriorityText: {
       color:
         "#B91C1C",
+    },
+
+    criticalPriorityBadge: {
+      backgroundColor: "#EDE9FE",
+      borderColor: "#C4B5FD",
+    },
+
+    criticalPriorityText: {
+      color: "#6D28D9",
     },
 
 

@@ -24,6 +24,13 @@ class Patient(db.Model):
         index=True
     )
 
+    clinic_id = db.Column(
+        db.Integer,
+        db.ForeignKey("clinics.id"),
+        nullable=True,
+        index=True
+    )
+
     # --------------------------------------------------------
     # STANDALONE PATIENT NAME
     #

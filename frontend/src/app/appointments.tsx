@@ -27,6 +27,7 @@ type Appointment = {
   doctor_name?: string | null;
   specialization?: string | null;
   room_number?: string | null;
+  clinic_name?: string | null;
   working_hours?: string | null;
   slot_id: number | null;
   booking_source?: "scheduled" | "walk_in";
@@ -581,6 +582,17 @@ function AppointmentCard({
       </View>
 
       <View style={styles.secondaryDetails}>
+        {appointment.clinic_name ? (
+          <View style={styles.secondaryRow}>
+            <Text style={styles.secondaryLabel}>
+              Clinic
+            </Text>
+            <Text style={styles.secondaryValue}>
+              {appointment.clinic_name}
+            </Text>
+          </View>
+        ) : null}
+
         <View style={styles.secondaryRow}>
           <Text
             style={styles.secondaryLabel}

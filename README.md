@@ -8,7 +8,8 @@ SmartClinic is a mobile-based clinic management system designed to improve appoi
 
 The system provides separate role-based access for:
 
-- Admin
+- Super Admin
+- Clinic Admin
 - Doctor
 - Receptionist
 - Patient
@@ -24,6 +25,7 @@ The project is developed as a Final Year Project using React Native / Expo, Flas
 - Secure login
 - Forgot password through email OTP
 - View doctors
+- See which clinic a doctor belongs to
 - Book appointments
 - Select in-person or video appointment type
 - View appointments
@@ -39,6 +41,8 @@ The project is developed as a Final Year Project using React Native / Expo, Flas
 - Forgot password through registered email
 - Doctor dashboard
 - Manage weekly schedule
+- Switch between approved clinic memberships on the dashboard and schedule page
+- Keep room, duty status, schedule, slots, and queue specific to each clinic
 - Generate appointment slots
 - View checked-in patient queue
 - Call next patient
@@ -57,32 +61,73 @@ The project is developed as a Final Year Project using React Native / Expo, Flas
 - View today's appointments
 - Patient check-in
 - View live clinic queue
+- Register regular front-desk walk-ins
+- Escalate waiting patients to urgent or critical priority
 
-### Admin
+### Super Admin and Clinic Admin
 
-- Admin dashboard
+- Super Admin dashboard
 - View system statistics
-- Create doctor accounts
-- Create receptionist accounts
-- Staff account email notifications
-- Monitor doctor duty status
+- Manually create clinics and their first Clinic Admin
+- Clinic Admin invites doctors, adds receptionists, and manages clinic-scoped staff access
+- Doctors approve new clinic associations from an email link
+- Receptionists have one active clinic assignment at a time
+- Deactivating a doctor at one clinic does not change their other clinic memberships
+- Doctor clinic access cannot be deactivated while that clinic has upcoming or active appointments
+
+To create an additional Super Admin before changing an existing account's
+role, run this backend command from the `backend` directory:
+
+```powershell
+.\venv\Scripts\flask.exe --app run.py create-super-admin
+```
+
+The command asks for the account details locally and hides password input.
+Do not put the password in the command or source code. Verify that the new
+account can sign in before changing the existing Super Admin's role.
+
+After the multi-clinic database upgrade, an existing Super Admin with an
+active Clinic Admin membership can be transferred with:
+
+```powershell
+.\venv\Scripts\flask.exe --app run.py make-clinic-admin
+```
+
+This command requires at least two active Super Admin accounts before it
+changes a role, so the system does not lose its Super Admin access.
 
 ## Queue Management
 
-SmartClinic currently supports:
+The current implementation supports:
 
 - FIFO queue processing
-- Normal and urgent priority support at database level
+- Critical, urgent, and normal priority ordering
 - Patient check-in before entering the live queue
-- Doctor-specific queue handling
+- Clinic-specific queue handling
 - Queue token generation
 - Consultation lifecycle management
-
-The complete emergency walk-in workflow is under development.
+- Regular and emergency front-desk walk-ins
 
 ## Appointment Conflict Protection
 
 Appointment booking uses database row locking to reduce race conditions and prevent two patients from booking the same appointment slot simultaneously.
+Doctor schedules and scheduled appointments also check for time conflicts across clinic memberships.
+
+## Multi-Clinic Database Upgrade
+
+The multi-clinic code requires the one-time schema upgrade in
+`backend/sql/multi_clinic_upgrade.sql`. The migration maps existing clinic
+records to a single initial clinic, removes the old one-schedule-per-doctor-
+per-day constraint so non-overlapping clinic shifts can coexist, and is
+**not safe to run more than once**.
+Back up the `smartclinic` database first, review the SQL, and do not run it
+against a database until the application changes have been reviewed and the
+current data has been confirmed. The migration has already been applied to
+the current development database; do not run it there again.
+
+Doctor invitation links use `APP_BASE_URL`; configure it to an address the
+doctor can open before testing email approval. Do not share passwords or
+other private environment settings when asking for setup help.
 
 ## Security Features
 
@@ -144,7 +189,6 @@ SmartClinic-FYP
 
 Planned Features
 The following features are planned as the project progresses:
-- Emergency / urgent walk-in patient workflow
 - Admin staff account activation and deactivation
 - Improved doctor availability engine
 - Doctor leave and absence handling
@@ -173,8 +217,13 @@ The Expo development server can then be opened using Expo Go or the web developm
 
 Project Status
 SmartClinic is currently under active Final Year Project development.
-Core authentication, role management, appointment booking, queue management, patient check-in, consultation management, and staff workflows have been implemented.
-Additional intelligent and telemedicine modules are being developed incrementally.
+Core authentication, role management, appointment booking, queue management,
+patient check-in, consultation management, and staff workflows have been
+implemented. The multi-clinic schema migration has been applied to the current
+development database and the existing records have been mapped to the initial
+clinic. End-to-end verification is still pending; do not treat multi-clinic
+features as complete until that testing has been done. Additional intelligent
+and telemedicine modules are being developed incrementally.
 
 Authors
 - Saad Jaffar - Reg No. (FA23-BSE-056)

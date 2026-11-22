@@ -10,9 +10,13 @@ from app.models.appointment import Appointment
 
 from app.models.appointment_slot import AppointmentSlot
 
+from app.models.clinic import Clinic
+
 from app.models.consultation import Consultation
 
 from app.models.doctor import Doctor
+
+from app.models.doctor_clinic_membership import DoctorClinicMembership
 
 from app.models.patient import Patient
 
@@ -21,12 +25,11 @@ from app.models.queue_token import QueueToken
 from app.models.user import User
 
 from app.utils.auth import (
-
+    clinic_context_required,
     role_required,
-
     token_required,
-
 )
+from app.utils.queue_priority import queue_priority_rank
 
 queue_bp = Blueprint(
 
@@ -55,9 +58,8 @@ queue_bp = Blueprint(
 )
 
 @token_required
-
 @role_required("doctor")
-
+@clinic_context_required
 def get_today_queue():
 
     """
@@ -107,9 +109,7 @@ def get_today_queue():
 
 
     doctor = Doctor.query.filter_by(
-
         user_id=user_id
-
     ).first()
 
 
@@ -179,8 +179,10 @@ def get_today_queue():
 
 
             Appointment.appointment_date
-
             == today,
+
+            Appointment.clinic_id
+            == request.clinic_id,
 
 
 
@@ -192,7 +194,7 @@ def get_today_queue():
 
         .order_by(
 
-            QueueToken.priority.desc(),
+            queue_priority_rank(QueueToken.priority).asc(),
 
             QueueToken.token_number.asc()
 
@@ -929,7 +931,14 @@ def get_my_queue_status():
     )
 
 
-
+    clinic = db.session.get(
+        Clinic,
+        appointment.clinic_id
+    )
+    doctor_membership = DoctorClinicMembership.query.filter_by(
+        doctor_id=appointment.doctor_id,
+        clinic_id=appointment.clinic_id,
+    ).first()
 
 
     appointment_info = {
@@ -971,13 +980,18 @@ def get_my_queue_status():
 
 
         "room_number": (
-
-            doctor.room_number
-
-            if doctor
-
+            doctor_membership.room_number
+            if doctor_membership
             else None
+        ),
 
+        "clinic_id":
+            appointment.clinic_id,
+
+        "clinic_name": (
+            clinic.name
+            if clinic
+            else None
         ),
 
 
@@ -1184,6 +1198,9 @@ def get_my_queue_status():
 
             == today,
 
+            Appointment.clinic_id
+            == appointment.clinic_id,
+
 
 
             QueueToken.check_in_time
@@ -1208,53 +1225,23 @@ def get_my_queue_status():
 
 
 
-        if queue.priority == "urgent":
+        current_priority_rank = {
+            "critical": 0,
+            "urgent": 1,
+            "normal": 2,
+        }[queue.priority]
 
+        other_priority_rank = queue_priority_rank(
+            QueueToken.priority
+        )
 
-
-            priority_filter = and_(
-
-                QueueToken.priority
-
-                == "urgent",
-
-
-
-                QueueToken.token_number
-
-                < queue.token_number
-
-            )
-
-
-
-        else:
-
-
-
-            priority_filter = or_(
-
-                QueueToken.priority
-
-                == "urgent",
-
-
-
-                and_(
-
-                    QueueToken.priority
-
-                    == "normal",
-
-
-
-                    QueueToken.token_number
-
-                    < queue.token_number
-
-                )
-
-            )
+        priority_filter = or_(
+            other_priority_rank < current_priority_rank,
+            and_(
+                other_priority_rank == current_priority_rank,
+                QueueToken.token_number < queue.token_number,
+            ),
+        )
 
 
 
@@ -1316,6 +1303,9 @@ def get_my_queue_status():
 
                 == today,
 
+                Appointment.clinic_id
+                == appointment.clinic_id,
+
 
 
                 QueueToken.check_in_time
@@ -1336,7 +1326,7 @@ def get_my_queue_status():
 
             .order_by(
 
-                QueueToken.priority.desc(),
+                queue_priority_rank(QueueToken.priority).asc(),
 
                 QueueToken.token_number.asc()
 
@@ -1529,9 +1519,8 @@ def get_my_queue_status():
 )
 
 @token_required
-
 @role_required("doctor")
-
+@clinic_context_required
 def call_next():
 
     """
@@ -1589,10 +1578,8 @@ def call_next():
 
 
     doctor = Doctor.query.filter_by(
-
         user_id=user_id
-
-    ).first()
+    ).with_for_update().first()
 
 
 
@@ -1655,10 +1642,7 @@ def call_next():
 
 
             Appointment.appointment_date
-
             == today,
-
-
 
             QueueToken.status.in_([
 
@@ -1739,8 +1723,10 @@ def call_next():
 
 
             Appointment.appointment_date
-
             == today,
+
+            Appointment.clinic_id
+            == request.clinic_id,
 
 
 
@@ -1768,7 +1754,7 @@ def call_next():
 
         .order_by(
 
-            QueueToken.priority.desc(),
+            queue_priority_rank(QueueToken.priority).asc(),
 
             QueueToken.token_number.asc()
 
@@ -2025,9 +2011,8 @@ def call_next():
 )
 
 @token_required
-
 @role_required("doctor")
-
+@clinic_context_required
 def start_consultation(
 
     queue_id
@@ -2198,7 +2183,10 @@ def start_consultation(
 
 
 
-    if not appointment:
+    if (
+        not appointment
+        or appointment.clinic_id != request.clinic_id
+    ):
 
         return {
 
@@ -2475,9 +2463,8 @@ def start_consultation(
 )
 
 @token_required
-
 @role_required("doctor")
-
+@clinic_context_required
 def complete_queue(
 
     queue_id
@@ -2648,7 +2635,10 @@ def complete_queue(
 
 
 
-    if not appointment:
+    if (
+        not appointment
+        or appointment.clinic_id != request.clinic_id
+    ):
 
         return {
 
@@ -2991,9 +2981,8 @@ def complete_queue(
 )
 
 @token_required
-
 @role_required("doctor")
-
+@clinic_context_required
 def skip_queue(
 
     queue_id
@@ -3164,7 +3153,10 @@ def skip_queue(
 
 
 
-    if not appointment:
+    if (
+        not appointment
+        or appointment.clinic_id != request.clinic_id
+    ):
 
         return {
 

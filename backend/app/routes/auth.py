@@ -47,6 +47,7 @@ PASSWORD_RESET_ROLES = (
     "patient",
     "doctor",
     "receptionist",
+    "clinic_admin",
 )
 
 
@@ -1473,6 +1474,7 @@ def reset_password():
         if user.role in [
             "doctor",
             "receptionist",
+            "clinic_admin",
         ]:
             user.must_change_password = False
 
@@ -1571,6 +1573,7 @@ def change_password():
     if user.role not in [
         "doctor",
         "receptionist",
+        "clinic_admin",
     ]:
         return {
             "message": (

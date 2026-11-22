@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { clearSelectedClinicId } from "./clinicStorage";
 
 const TOKEN_KEY = "smartclinic_token";
 const USER_KEY = "smartclinic_user";
@@ -28,4 +29,5 @@ export async function getUser(): Promise<any | null> {
 
 export async function clearAuth() {
   await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+  await clearSelectedClinicId();
 }

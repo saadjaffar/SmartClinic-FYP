@@ -5,10 +5,16 @@ from app.models.consultation import Consultation
 from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.appointment import Appointment
+from app.models.clinic import Clinic
 from app.models.queue_token import QueueToken
+from app.models.doctor_clinic_membership import DoctorClinicMembership
 from app.models.user import User
 from datetime import datetime, timezone
-from app.utils.auth import token_required, role_required
+from app.utils.auth import (
+    clinic_context_required,
+    token_required,
+    role_required,
+)
 
 def utc_iso(value):
     if value is None:
@@ -36,6 +42,7 @@ consultation_bp = Blueprint(
 @consultation_bp.route("", methods=["POST"])
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def create_consultation():
     """
     Save consultation details
@@ -147,6 +154,11 @@ def create_consultation():
     )
 
     if not appointment:
+        return {
+            "message": "Appointment not found",
+            "status": "error"
+        }, 404
+    if appointment.clinic_id != request.clinic_id:
         return {
             "message": "Appointment not found",
             "status": "error"
@@ -276,6 +288,29 @@ def get_consultation(consultation_id):
                 "status": "error"
             }, 403
 
+        clinic_id = request.headers.get("X-Clinic-Id", type=int)
+        membership = DoctorClinicMembership.query.filter_by(
+            doctor_id=doctor.id,
+            clinic_id=clinic_id,
+            status="active",
+        ).first() if clinic_id else None
+        clinic = db.session.get(Clinic, clinic_id) if clinic_id else None
+        appointment = db.session.get(
+            Appointment,
+            consultation.appointment_id
+        )
+        if (
+            not membership
+            or not clinic
+            or clinic.status != "active"
+            or not appointment
+            or appointment.clinic_id != clinic_id
+        ):
+            return {
+                "message": "Select an active clinic containing this consultation",
+                "status": "error",
+            }, 403
+
     # ----------------------------------------
     # Patient access
     # ----------------------------------------
@@ -305,6 +340,16 @@ def get_consultation(consultation_id):
             "status": "error"
         }, 403
 
+    appointment = db.session.get(
+        Appointment,
+        consultation.appointment_id
+    )
+    clinic = (
+        db.session.get(Clinic, appointment.clinic_id)
+        if appointment
+        else None
+    )
+
     return {
         "message": "Consultation retrieved successfully",
         "status": "success",
@@ -313,6 +358,8 @@ def get_consultation(consultation_id):
             "appointment_id": consultation.appointment_id,
             "patient_id": consultation.patient_id,
             "doctor_id": consultation.doctor_id,
+            "clinic_id": appointment.clinic_id if appointment else None,
+            "clinic_name": clinic.name if clinic else None,
             "chief_complaint": consultation.chief_complaint,
             "diagnosis": consultation.diagnosis,
             "prescription": consultation.prescription,
@@ -384,6 +431,15 @@ def my_consultations():
     result = []
 
     for consultation in consultations:
+        appointment = db.session.get(
+            Appointment,
+            consultation.appointment_id
+        )
+        clinic = (
+            db.session.get(Clinic, appointment.clinic_id)
+            if appointment
+            else None
+        )
 
         doctor = db.session.get(
             Doctor,
@@ -406,6 +462,8 @@ def my_consultations():
             "appointment_id": consultation.appointment_id,
             "doctor_id": consultation.doctor_id,
             "doctor_name": doctor_name,
+            "clinic_id": appointment.clinic_id if appointment else None,
+            "clinic_name": clinic.name if clinic else None,
             "chief_complaint": consultation.chief_complaint,
             "diagnosis": consultation.diagnosis,
             "prescription": consultation.prescription,

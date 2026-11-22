@@ -83,6 +83,7 @@ def decode_token(token):
 STAFF_ROLES = {
     "doctor",
     "receptionist",
+    "clinic_admin",
 }
 
 
@@ -412,6 +413,168 @@ def role_required(
                 }, 403
 
             return f(
+                *args,
+                **kwargs
+            )
+
+        return decorated
+
+    return decorator
+
+
+def clinic_context_required(f):
+    """
+    Require active membership in the clinic selected by the client.
+
+    The selected clinic ID is sent in the X-Clinic-Id request header.
+    """
+
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not hasattr(request, "user"):
+            return {
+                "message": "Authentication required",
+                "status": "error",
+            }, 401
+
+        raw_clinic_id = request.headers.get("X-Clinic-Id")
+        try:
+            clinic_id = int(raw_clinic_id)
+        except (TypeError, ValueError):
+            return {
+                "message": "Select a clinic before continuing",
+                "status": "error",
+            }, 400
+
+        from app import db
+        from app.models import (
+            Clinic,
+            ClinicStaffMembership,
+            Doctor,
+            DoctorClinicMembership,
+        )
+
+        clinic = db.session.get(Clinic, clinic_id)
+        if not clinic or clinic.status != "active":
+            return {
+                "message": "Active clinic not found",
+                "status": "error",
+            }, 404
+
+        user_id = request.user.get("user_id")
+        role = request.user.get("role")
+        membership = None
+
+        if role == "doctor":
+            doctor = Doctor.query.filter_by(
+                user_id=user_id
+            ).first()
+            if doctor:
+                membership = DoctorClinicMembership.query.filter_by(
+                    doctor_id=doctor.id,
+                    clinic_id=clinic_id,
+                    status="active",
+                ).first()
+        elif role in {"clinic_admin", "receptionist"}:
+            membership = ClinicStaffMembership.query.filter_by(
+                user_id=user_id,
+                clinic_id=clinic_id,
+                staff_role=role,
+                status="active",
+            ).first()
+
+        if not membership:
+            return {
+                "message": "You do not have active access to this clinic",
+                "status": "error",
+            }, 403
+
+        request.clinic_id = clinic_id
+        request.clinic = clinic
+        request.clinic_membership = membership
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+def clinic_staff_required(
+    *allowed_staff_roles
+):
+    """
+    Require an active clinic staff membership.
+
+    The route must provide clinic_id as a URL parameter.
+    Example:
+        /api/clinics/<int:clinic_id>/receptionists
+    """
+
+    def decorator(f):
+
+        @wraps(f)
+        def decorated(
+            clinic_id,
+            *args,
+            **kwargs
+        ):
+            if not hasattr(
+                request,
+                "user"
+            ):
+                return {
+                    "message":
+                        "Authentication required",
+                    "status":
+                        "error"
+                }, 401
+
+            from app.models import (
+                ClinicStaffMembership
+            )
+
+            user_id = request.user.get(
+                "user_id"
+            )
+
+            membership = (
+                ClinicStaffMembership.query
+                .filter_by(
+                    clinic_id=clinic_id,
+                    user_id=user_id,
+                    status="active"
+                )
+                .first()
+            )
+
+            if not membership:
+                return {
+                    "message": (
+                        "You do not have active "
+                        "access to this clinic"
+                    ),
+                    "status":
+                        "error"
+                }, 403
+
+            if (
+                allowed_staff_roles
+                and membership.staff_role
+                not in allowed_staff_roles
+            ):
+                return {
+                    "message": (
+                        "You do not have permission "
+                        "to perform this clinic action"
+                    ),
+                    "status":
+                        "error"
+                }, 403
+
+            request.clinic_membership = (
+                membership
+            )
+
+            return f(
+                clinic_id,
                 *args,
                 **kwargs
             )

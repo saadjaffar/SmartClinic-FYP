@@ -5,7 +5,9 @@ from flask import Blueprint, request
 from app import db
 from app.models.appointment import Appointment
 from app.models.appointment_slot import AppointmentSlot
+from app.models.clinic import Clinic
 from app.models.doctor import Doctor
+from app.models.doctor_clinic_membership import DoctorClinicMembership
 from app.models.patient import Patient
 from app.models.queue_token import QueueToken
 from app.models.user import User
@@ -63,6 +65,10 @@ def get_available_slots():
         "doctor_id",
         type=int
     )
+    clinic_id = request.args.get(
+        "clinic_id",
+        type=int
+    )
 
     slot_date = request.args.get(
         "date"
@@ -70,11 +76,12 @@ def get_available_slots():
 
     if (
         not doctor_id
+        or not clinic_id
         or not slot_date
     ):
         return {
             "message": (
-                "doctor_id and date are required"
+                "doctor_id, clinic_id and date are required"
             ),
             "status":
                 "error"
@@ -120,9 +127,24 @@ def get_available_slots():
                 "error"
         }, 404
 
+    membership = DoctorClinicMembership.query.filter_by(
+        doctor_id=doctor_id,
+        clinic_id=clinic_id,
+        status="active",
+    ).first()
+    clinic = db.session.get(Clinic, clinic_id)
+    if not membership or not clinic or clinic.status != "active":
+        return {
+            "message": "Doctor is not available at this clinic",
+            "status": "error",
+        }, 404
+
     query = AppointmentSlot.query.filter(
         AppointmentSlot.doctor_id
         == doctor_id,
+
+        AppointmentSlot.clinic_id
+        == clinic_id,
 
         AppointmentSlot.slot_date
         == requested_date,
@@ -297,6 +319,10 @@ def book_appointment():
         "doctor_id"
     )
 
+    clinic_id = data.get(
+        "clinic_id"
+    )
+
     slot_id = data.get(
         "slot_id"
     )
@@ -311,16 +337,30 @@ def book_appointment():
 
     if (
         not doctor_id
+        or not clinic_id
         or not slot_id
         or not appointment_type
     ):
         return {
             "message": (
-                "doctor_id, slot_id and "
+                "doctor_id, clinic_id, slot_id and "
                 "appointment_type are required"
             ),
             "status":
                 "error"
+        }, 400
+
+    try:
+        clinic_id = int(clinic_id)
+    except (TypeError, ValueError):
+        return {
+            "message": "clinic_id must be a positive integer",
+            "status": "error",
+        }, 400
+    if clinic_id <= 0:
+        return {
+            "message": "clinic_id must be a positive integer",
+            "status": "error",
         }, 400
 
     if appointment_type not in [
@@ -369,6 +409,19 @@ def book_appointment():
                     "Doctor not found",
                 "status":
                     "error"
+            }, 404
+
+        membership = DoctorClinicMembership.query.filter_by(
+            doctor_id=doctor.id,
+            clinic_id=clinic_id,
+            status="active",
+        ).first()
+        clinic = db.session.get(Clinic, clinic_id)
+        if not membership or not clinic or clinic.status != "active":
+            db.session.rollback()
+            return {
+                "message": "Doctor is not available at this clinic",
+                "status": "error",
             }, 404
 
         # ----------------------------------------------------
@@ -434,6 +487,13 @@ def book_appointment():
                 ),
                 "status":
                     "error"
+            }, 400
+
+        if slot.clinic_id != clinic_id:
+            db.session.rollback()
+            return {
+                "message": "Selected slot does not belong to this clinic",
+                "status": "error",
             }, 400
 
         # ----------------------------------------------------
@@ -503,6 +563,28 @@ def book_appointment():
                     "error"
             }, 409
 
+        conflicting_appointment = (
+            Appointment.query
+            .join(
+                AppointmentSlot,
+                Appointment.slot_id == AppointmentSlot.id,
+            )
+            .filter(
+                Appointment.doctor_id == doctor.id,
+                Appointment.appointment_date == slot.slot_date,
+                Appointment.status != "cancelled",
+                AppointmentSlot.start_time < slot.end_time,
+                AppointmentSlot.end_time > slot.start_time,
+            )
+            .first()
+        )
+        if conflicting_appointment:
+            db.session.rollback()
+            return {
+                "message": "Doctor already has an appointment at this time",
+                "status": "error",
+            }, 409
+
         # ----------------------------------------------------
         # NEXT QUEUE TOKEN
         #
@@ -526,7 +608,10 @@ def book_appointment():
                 == doctor.id,
 
                 Appointment.appointment_date
-                == slot.slot_date
+                == slot.slot_date,
+
+                Appointment.clinic_id
+                == clinic_id
             )
             .scalar()
         )
@@ -545,6 +630,9 @@ def book_appointment():
 
             doctor_id=
                 doctor.id,
+
+            clinic_id=
+                clinic_id,
 
             slot_id=
                 slot.id,
@@ -638,7 +726,13 @@ def book_appointment():
                     doctor.specialization,
 
                 "room_number":
-                    doctor.room_number,
+                    membership.room_number,
+
+                "clinic_id":
+                    clinic.id,
+
+                "clinic_name":
+                    clinic.name,
 
                 "slot_id":
                     appointment.slot_id,
@@ -809,6 +903,12 @@ def my_appointments():
                 appointment.slot_id
             )
 
+        clinic = db.session.get(Clinic, appointment.clinic_id)
+        doctor_membership = DoctorClinicMembership.query.filter_by(
+            doctor_id=appointment.doctor_id,
+            clinic_id=appointment.clinic_id,
+        ).first()
+
         result.append({
             "id":
                 appointment.id,
@@ -826,8 +926,17 @@ def my_appointments():
             ),
 
             "room_number": (
-                doctor.room_number
-                if doctor
+                doctor_membership.room_number
+                if doctor_membership
+                else None
+            ),
+
+            "clinic_id":
+                appointment.clinic_id,
+
+            "clinic_name": (
+                clinic.name
+                if clinic
                 else None
             ),
 

@@ -4,6 +4,7 @@ from flask import Blueprint, request
 
 from app import db
 from app.models.doctor import Doctor
+from app.models.doctor_clinic_membership import DoctorClinicMembership
 from app.models.user import User
 
 from app.utils.auth import (
@@ -309,15 +310,21 @@ def create_doctor():
               type: string
               example: off_duty
     responses:
-      201:
-        description: Doctor created successfully
-      400:
-        description: Invalid request
+      410:
+        description: Use the clinic-scoped doctor invitation endpoint
       403:
         description: Admin access required
       409:
         description: Email already exists
     """
+
+    return {
+        "message": (
+            "Doctors must be invited by a Clinic Admin through "
+            "the clinic-scoped invitation workflow"
+        ),
+        "status": "error",
+    }, 410
 
     data = request.get_json(
         silent=True
@@ -757,15 +764,21 @@ def create_receptionist():
               format: password
               example: ReceptionistTemp@123
     responses:
-      201:
-        description: Receptionist created successfully
-      400:
-        description: Invalid request
+      410:
+        description: Use the clinic-scoped receptionist endpoint
       403:
         description: Admin access required
       409:
         description: Email already exists
     """
+
+    return {
+        "message": (
+            "Receptionists must be assigned by a Clinic Admin "
+            "through the clinic-scoped workflow"
+        ),
+        "status": "error",
+    }, 410
 
     data = request.get_json(
         silent=True
@@ -1200,6 +1213,12 @@ def update_staff_status(user_id):
             ):
                 doctor.duty_status = (
                     "off_duty"
+                )
+                DoctorClinicMembership.query.filter_by(
+                    doctor_id=doctor.id
+                ).update(
+                    {"duty_status": "off_duty"},
+                    synchronize_session=False
                 )
 
 

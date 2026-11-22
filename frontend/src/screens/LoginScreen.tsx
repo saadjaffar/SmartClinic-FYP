@@ -147,7 +147,8 @@ export default function LoginScreen() {
 
 const isStaff =
   role === "doctor" ||
-  role === "receptionist";
+  role === "receptionist" ||
+  role === "clinic_admin";
 
 
 // Staff using temporary password
@@ -195,6 +196,17 @@ if (
       ) {
         router.replace(
           "/receptionist" as Href
+        );
+
+        return;
+      }
+
+
+      if (
+        role === "clinic_admin"
+      ) {
+        router.replace(
+          "/clinic-admin" as Href
         );
 
         return;

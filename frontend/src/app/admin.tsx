@@ -593,7 +593,7 @@ export default function AdminScreen() {
 
 
           {/* ================================================= */}
-          {/* STAFF MANAGEMENT */}
+          {/* CLINIC MANAGEMENT */}
           {/* ================================================= */}
 
           <Text
@@ -601,7 +601,7 @@ export default function AdminScreen() {
               styles.sectionTitle
             }
           >
-            Staff Management
+            Platform Clinics
           </Text>
 
           <Text
@@ -609,8 +609,7 @@ export default function AdminScreen() {
               styles.sectionSubtitle
             }
           >
-            Administrative tools for
-            clinic staff
+            Register and manage clinics and their first Clinic Admin
           </Text>
 
 
@@ -619,14 +618,10 @@ export default function AdminScreen() {
               styles.managementCard
             }
           >
-            {/* ================================================= */}
-            {/* MANAGE DOCTORS */}
-            {/* ================================================= */}
-
             <Pressable
               onPress={() =>
                 router.push(
-                  "/admin-doctors"
+                  "/admin-clinics"
                 )
               }
               style={({
@@ -644,7 +639,7 @@ export default function AdminScreen() {
                 }
               >
                 <Ionicons
-                  name="medkit-outline"
+                  name="business-outline"
                   size={22}
                   color="#0F766E"
                 />
@@ -660,7 +655,7 @@ export default function AdminScreen() {
                     styles.managementTitle
                   }
                 >
-                  Manage Doctors
+                  Manage Clinics
                 </Text>
 
                 <Text
@@ -668,8 +663,7 @@ export default function AdminScreen() {
                     styles.managementSubtitle
                   }
                 >
-                  Add and view doctor
-                  accounts
+                  Create a clinic and assign its first Clinic Admin
                 </Text>
               </View>
 
@@ -689,81 +683,6 @@ export default function AdminScreen() {
             </Pressable>
 
 
-            <View
-              style={
-                styles.divider
-              }
-            />
-
-
-            {/* ================================================= */}
-            {/* MANAGE RECEPTIONISTS */}
-            {/* ================================================= */}
-
-            <Pressable
-              onPress={() =>
-                router.push(
-                  "/admin-receptionists"
-                )
-              }
-              style={({
-                pressed,
-              }) => [
-                styles.managementRow,
-
-                pressed &&
-                  styles.pressed,
-              ]}
-            >
-              <View
-                style={
-                  styles.managementIcon
-                }
-              >
-                <Ionicons
-                  name="desktop-outline"
-                  size={22}
-                  color="#0F766E"
-                />
-              </View>
-
-              <View
-                style={
-                  styles.managementContent
-                }
-              >
-                <Text
-                  style={
-                    styles.managementTitle
-                  }
-                >
-                  Manage Receptionists
-                </Text>
-
-                <Text
-                  style={
-                    styles.managementSubtitle
-                  }
-                >
-                  Add and view receptionist
-                  accounts
-                </Text>
-              </View>
-
-              <View
-                style={
-                  styles.nextBadge
-                }
-              >
-                <Text
-                  style={
-                    styles.nextBadgeText
-                  }
-                >
-                  NEXT
-                </Text>
-              </View>
-            </Pressable>
           </View>
 
 

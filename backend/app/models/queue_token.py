@@ -34,7 +34,7 @@ class QueueToken(db.Model):
     )
 
     priority = db.Column(
-        db.Enum("normal", "urgent"),
+        db.Enum("normal", "urgent", "critical"),
         nullable=False,
         default="normal"
     )

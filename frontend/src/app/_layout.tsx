@@ -48,6 +48,11 @@ const ADMIN_ROUTES = new Set([
   "admin",
   "admin-doctors",
   "admin-receptionists",
+  "admin-clinics",
+]);
+
+const CLINIC_ADMIN_ROUTES = new Set([
+  "clinic-admin",
 ]);
 
 const RECEPTIONIST_ROUTES = new Set([
@@ -55,6 +60,7 @@ const RECEPTIONIST_ROUTES = new Set([
   "receptionist-appointments",
   "receptionist-live-queue",
   "receptionist-emergency",
+  "receptionist-walk-in",
 ]);
 
 const CHANGE_PASSWORD_ROUTE =
@@ -78,6 +84,10 @@ function getHomeRoute(
 
   if (role === "admin") {
     return "/admin";
+  }
+
+  if (role === "clinic_admin") {
+    return "/clinic-admin";
   }
 
   if (role === "receptionist") {
@@ -114,6 +124,12 @@ function isAllowedRoute(
     );
   }
 
+  if (role === "clinic_admin") {
+    return CLINIC_ADMIN_ROUTES.has(
+      route
+    );
+  }
+
   if (
     role === "receptionist"
   ) {
@@ -137,6 +153,7 @@ function isProtectedRoute(
     PATIENT_ROUTES.has(route)
     || DOCTOR_ROUTES.has(route)
     || ADMIN_ROUTES.has(route)
+    || CLINIC_ADMIN_ROUTES.has(route)
     || RECEPTIONIST_ROUTES.has(route)
     || route === CHANGE_PASSWORD_ROUTE
   );
@@ -214,7 +231,8 @@ export default function RootLayout() {
         const isStaff =
           role === "doctor"
           || role ===
-            "receptionist";
+            "receptionist"
+          || role === "clinic_admin";
 
 
         const mustChangePassword =

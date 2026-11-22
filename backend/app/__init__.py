@@ -1,3 +1,5 @@
+import click
+
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
@@ -99,6 +101,104 @@ def create_app():
 
     from app.routes.receptionist import receptionist_bp
     app.register_blueprint(receptionist_bp)
+
+    from app.routes.clinics import clinic_bp
+    app.register_blueprint(clinic_bp)
+
+    @app.cli.command("create-super-admin")
+    def create_super_admin():
+        """Create a Super Admin account with credentials entered locally."""
+        from app.utils.auth import hash_password
+
+        name = click.prompt("Super Admin name").strip()
+        email = click.prompt("Super Admin email").strip().lower()
+        password = click.prompt(
+            "Password",
+            hide_input=True,
+            confirmation_prompt=True,
+        )
+
+        if not name:
+            raise click.ClickException("Name is required.")
+
+        email_parts = email.rsplit("@", 1)
+        if (
+            len(email_parts) != 2
+            or not email_parts[0]
+            or "." not in email_parts[1]
+            or email_parts[1].startswith(".")
+            or email_parts[1].endswith(".")
+        ):
+            raise click.ClickException("Enter a valid email address.")
+
+        if len(password) < 8:
+            raise click.ClickException(
+                "Password must be at least 8 characters long."
+            )
+
+        existing_user = User.query.filter(
+            db.func.lower(User.email) == email
+        ).first()
+        if existing_user:
+            raise click.ClickException(
+                "A SmartClinic account already uses this email."
+            )
+
+        user = User(
+            name=name,
+            email=email,
+            password_hash=hash_password(password),
+            role="admin",
+            status="active",
+            email_verified=True,
+            must_change_password=False,
+        )
+        db.session.add(user)
+        db.session.commit()
+        click.echo("Super Admin account created successfully.")
+
+    @app.cli.command("make-clinic-admin")
+    def make_clinic_admin():
+        """Transfer an existing clinic-linked account from Super Admin."""
+        from app.models import ClinicStaffMembership
+
+        email = click.prompt("Clinic Admin email").strip().lower()
+        user = User.query.filter(
+            db.func.lower(User.email) == email
+        ).first()
+
+        if not user:
+            raise click.ClickException("No account uses this email.")
+
+        if user.role != "admin":
+            raise click.ClickException(
+                "Only a current Super Admin account can be transferred."
+            )
+
+        membership = ClinicStaffMembership.query.filter_by(
+            user_id=user.id,
+            staff_role="clinic_admin",
+            status="active",
+        ).first()
+        if not membership:
+            raise click.ClickException(
+                "This account has no active Clinic Admin membership."
+            )
+
+        active_super_admins = User.query.filter_by(
+            role="admin",
+            status="active",
+        ).count()
+        if active_super_admins < 2:
+            raise click.ClickException(
+                "Create and verify another active Super Admin first."
+            )
+
+        user.role = "clinic_admin"
+        db.session.commit()
+        click.echo(
+            "Account transferred to Clinic Admin successfully."
+        )
 
     @app.route("/")
     def home():

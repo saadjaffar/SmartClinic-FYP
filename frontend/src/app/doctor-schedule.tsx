@@ -25,6 +25,18 @@ import {
 } from "expo-router";
 
 import { apiRequest } from "../api/client";
+import {
+  getSelectedClinicId,
+  setSelectedClinicId,
+} from "../storage/clinicStorage";
+
+
+type DoctorClinic = {
+  clinic_id: number;
+  clinic_name: string;
+  role: string;
+  status: string;
+};
 
 
 type DoctorSchedule = {
@@ -65,6 +77,12 @@ const DAYS = [
 
 export default function DoctorScheduleScreen() {
   const router = useRouter();
+
+  const [clinics, setClinics] =
+    useState<DoctorClinic[]>([]);
+
+  const [selectedClinicId, setSelectedClinicIdState] =
+    useState<number | null>(null);
 
   const [schedules, setSchedules] =
     useState<DoctorSchedule[]>([]);
@@ -166,6 +184,39 @@ export default function DoctorScheduleScreen() {
         try {
           setError("");
 
+          const clinicResponse =
+            await apiRequest("/api/clinics/my");
+          const availableClinics: DoctorClinic[] =
+            Array.isArray(clinicResponse?.clinics)
+              ? clinicResponse.clinics.filter(
+                  (item: DoctorClinic) =>
+                    item.role === "doctor" &&
+                    item.status === "active"
+                )
+              : [];
+          setClinics(availableClinics);
+
+          const savedClinicId =
+            await getSelectedClinicId();
+          const clinicId = availableClinics.some(
+            (clinic) => clinic.clinic_id === savedClinicId
+          )
+            ? savedClinicId
+            : availableClinics[0]?.clinic_id ?? null;
+
+          setSelectedClinicIdState(clinicId);
+          if (!clinicId) {
+            setSchedules([]);
+            setError(
+              "You do not have an approved clinic assignment yet."
+            );
+            return;
+          }
+
+          if (clinicId !== savedClinicId) {
+            await setSelectedClinicId(clinicId);
+          }
+
           const response =
             await apiRequest(
               "/api/doctors/schedule"
@@ -193,6 +244,31 @@ export default function DoctorScheduleScreen() {
       },
       []
     );
+
+  const handleClinicSelect = async (clinicId: number) => {
+    if (clinicId === selectedClinicId) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setSchedules([]);
+      clearGenerationResult();
+      await setSelectedClinicId(clinicId);
+      setSelectedClinicIdState(clinicId);
+      await loadSchedule();
+    } catch (err: any) {
+      setError(
+        err?.message ||
+          "Unable to switch the selected clinic."
+      );
+      setLoading(false);
+    }
+  };
+
+  const selectedClinic = clinics.find(
+    (clinic) => clinic.clinic_id === selectedClinicId
+  );
 
 
   useFocusEffect(
@@ -859,6 +935,64 @@ export default function DoctorScheduleScreen() {
             styles.content
           }
         >
+
+          {clinics.length > 0 ? (
+            <View style={styles.clinicCard}>
+              <Text style={styles.clinicLabel}>
+                SCHEDULE FOR CLINIC
+              </Text>
+              {clinics.length > 1 ? (
+                <View style={styles.clinicOptions}>
+                  {clinics.map((clinic) => {
+                    const selected =
+                      clinic.clinic_id === selectedClinicId;
+                    return (
+                      <Pressable
+                        key={clinic.clinic_id}
+                        disabled={loading || saving || generatingSlots}
+                        onPress={() =>
+                          handleClinicSelect(clinic.clinic_id)
+                        }
+                        style={[
+                          styles.clinicOption,
+                          selected && styles.clinicOptionSelected,
+                          (loading || saving || generatingSlots) &&
+                            styles.disabledButton,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.clinicOptionText,
+                            selected &&
+                              styles.clinicOptionTextSelected,
+                          ]}
+                        >
+                          {clinic.clinic_name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.clinicOptionHint,
+                            selected &&
+                              styles.clinicOptionTextSelected,
+                          ]}
+                        >
+                          {selected ? "CURRENT" : "Select"}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+              <Text style={styles.currentClinicName}>
+                {selectedClinic?.clinic_name ||
+                  "No clinic selected"}
+              </Text>
+              <Text style={styles.clinicHelper}>
+                Weekly hours and generated slots below belong only to
+                this clinic.
+              </Text>
+            </View>
+          ) : null}
 
           {/* LOAD ERROR */}
 
@@ -2325,6 +2459,75 @@ const styles =
       maxWidth: 900,
       alignSelf: "center",
       padding: 18,
+    },
+
+    clinicCard: {
+      backgroundColor: "#ECFDF5",
+      borderColor: "#A7F3D0",
+      borderWidth: 1,
+      borderRadius: 14,
+      padding: 15,
+      marginBottom: 16,
+    },
+
+    clinicLabel: {
+      color: "#0F766E",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+
+    currentClinicName: {
+      color: "#134E4A",
+      fontSize: 17,
+      fontWeight: "900",
+      marginTop: 4,
+    },
+
+    clinicHelper: {
+      color: "#64748B",
+      fontSize: 12,
+      lineHeight: 18,
+      marginTop: 5,
+    },
+
+    clinicOptions: {
+      gap: 8,
+      marginTop: 10,
+      marginBottom: 6,
+    },
+
+    clinicOption: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: "#CBD5E1",
+      borderRadius: 10,
+      backgroundColor: "#FFFFFF",
+    },
+
+    clinicOptionSelected: {
+      backgroundColor: "#0F766E",
+      borderColor: "#0F766E",
+    },
+
+    clinicOptionText: {
+      color: "#334155",
+      fontWeight: "700",
+      flex: 1,
+    },
+
+    clinicOptionTextSelected: {
+      color: "#FFFFFF",
+    },
+
+    clinicOptionHint: {
+      color: "#64748B",
+      fontSize: 10,
+      fontWeight: "800",
     },
 
 

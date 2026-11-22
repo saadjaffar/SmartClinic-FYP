@@ -1,15 +1,23 @@
 from datetime import date, datetime, timedelta
 
 from flask import Blueprint, request
+from sqlalchemy import and_, or_
 
 from app import db
 from app.models.appointment import Appointment
 from app.models.appointment_slot import AppointmentSlot
 from app.models.doctor import Doctor
+from app.models.doctor_clinic_membership import DoctorClinicMembership
 from app.models.doctor_schedule import DoctorSchedule
+from app.models.clinic import Clinic
 from app.models.queue_token import QueueToken
 from app.models.user import User
-from app.utils.auth import token_required, role_required
+from app.utils.auth import (
+    clinic_context_required,
+    token_required,
+    role_required,
+)
+from app.utils.queue_priority import queue_priority_rank
 
 
 doctor_bp = Blueprint(
@@ -25,7 +33,8 @@ doctor_bp = Blueprint(
 
 def block_future_available_slots(
     doctor_id,
-    day_names
+    clinic_id,
+    schedule_ranges
 ):
     """
     Block future unbooked slots created from an old
@@ -34,18 +43,6 @@ def block_future_available_slots(
     Booked appointment slots are never changed.
     """
 
-    if isinstance(
-        day_names,
-        str
-    ):
-        day_names = {
-            day_names
-        }
-    else:
-        day_names = set(
-            day_names
-        )
-
     today = date.today()
 
     slots = (
@@ -53,6 +50,9 @@ def block_future_available_slots(
         .filter(
             AppointmentSlot.doctor_id
             == doctor_id,
+
+            AppointmentSlot.clinic_id
+            == clinic_id,
 
             AppointmentSlot.slot_date
             >= today,
@@ -72,7 +72,12 @@ def block_future_available_slots(
             )
         )
 
-        if slot_day in day_names:
+        if any(
+            slot_day == day_name
+            and slot.start_time < range_end
+            and slot.end_time > range_start
+            for day_name, range_start, range_end in schedule_ranges
+        ):
             slot.status = "blocked"
 
             slot.version = (
@@ -82,6 +87,44 @@ def block_future_available_slots(
             blocked_count += 1
 
     return blocked_count
+
+
+def has_other_clinic_appointment_conflict(
+    doctor_id,
+    clinic_id,
+    day_name,
+    start_time,
+    end_time
+):
+    now = datetime.now()
+    appointments = (
+        Appointment.query
+        .join(
+            AppointmentSlot,
+            Appointment.slot_id == AppointmentSlot.id
+        )
+        .filter(
+            Appointment.doctor_id == doctor_id,
+            Appointment.clinic_id != clinic_id,
+            Appointment.appointment_date >= date.today(),
+            Appointment.status != "cancelled",
+            or_(
+                Appointment.appointment_date > now.date(),
+                and_(
+                    Appointment.appointment_date == now.date(),
+                    AppointmentSlot.end_time > now.time(),
+                ),
+            ),
+            AppointmentSlot.start_time < end_time,
+            AppointmentSlot.end_time > start_time,
+        )
+        .all()
+    )
+
+    return any(
+        appointment.appointment_date.strftime("%A") == day_name
+        for appointment in appointments
+    )
 
 
 # ============================================================
@@ -94,6 +137,7 @@ def block_future_available_slots(
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def get_doctor_profile():
     """
     Get own doctor profile
@@ -131,6 +175,7 @@ def get_doctor_profile():
         User,
         user_id
     )
+    membership = request.clinic_membership
 
     return {
         "message":
@@ -165,13 +210,13 @@ def get_doctor_profile():
                 doctor.license_number,
 
             "room_number":
-                doctor.room_number,
+                membership.room_number,
 
             "working_hours":
                 doctor.working_hours,
 
             "duty_status":
-                doctor.duty_status
+                membership.duty_status
         }
     }, 200
 
@@ -186,6 +231,7 @@ def get_doctor_profile():
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def update_doctor_profile():
     """
     Update own doctor profile
@@ -306,7 +352,7 @@ def update_doctor_profile():
         )
 
     if "room_number" in data:
-        doctor.room_number = (
+        request.clinic_membership.room_number = (
             data["room_number"]
         )
 
@@ -345,13 +391,13 @@ def update_doctor_profile():
                     doctor.license_number,
 
                 "room_number":
-                    doctor.room_number,
+                    request.clinic_membership.room_number,
 
                 "working_hours":
                     doctor.working_hours,
 
                 "duty_status":
-                    doctor.duty_status
+                    request.clinic_membership.duty_status
             }
         }, 200
 
@@ -376,6 +422,7 @@ def update_doctor_profile():
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def update_duty_status():
     """
     Update doctor duty status
@@ -415,7 +462,7 @@ def update_duty_status():
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
-    ).first()
+    ).with_for_update().first()
 
     if not doctor:
         return {
@@ -455,7 +502,8 @@ def update_duty_status():
                 "error"
         }, 400
 
-    doctor.duty_status = duty_status
+    membership = request.clinic_membership
+    membership.duty_status = duty_status
 
     try:
         db.session.commit()
@@ -468,7 +516,7 @@ def update_duty_status():
                 "success",
 
             "duty_status":
-                doctor.duty_status
+                membership.duty_status
         }, 200
 
     except Exception:
@@ -542,25 +590,68 @@ def get_doctors():
         if user.status != "active":
             continue
 
-        result.append({
-            "id":
-                doctor.id,
+        memberships = (
+            DoctorClinicMembership.query
+            .join(Clinic)
+            .filter(
+                DoctorClinicMembership.doctor_id == doctor.id,
+                DoctorClinicMembership.status == "active",
+                Clinic.status == "active",
+            )
+            .order_by(Clinic.name.asc())
+            .all()
+        )
 
-            "name":
-                user.name,
+        for membership in memberships:
+            clinic_schedules = (
+                DoctorSchedule.query
+                .filter_by(
+                    doctor_id=doctor.id,
+                    clinic_id=membership.clinic_id,
+                    is_active=True,
+                )
+                .all()
+            )
+            day_order = {
+                "Monday": 1,
+                "Tuesday": 2,
+                "Wednesday": 3,
+                "Thursday": 4,
+                "Friday": 5,
+                "Saturday": 6,
+                "Sunday": 7,
+            }
+            clinic_schedules.sort(
+                key=lambda schedule: (
+                    day_order.get(schedule.day_of_week, 99),
+                    schedule.start_time,
+                )
+            )
+            weekly_schedule = [
+                {
+                    "day_of_week": schedule.day_of_week,
+                    "start_time": schedule.start_time.strftime("%H:%M"),
+                    "end_time": schedule.end_time.strftime("%H:%M"),
+                }
+                for schedule in clinic_schedules
+            ]
+            schedule_summary = ", ".join(
+                f"{item['day_of_week']} "
+                f"{item['start_time']}-{item['end_time']}"
+                for item in weekly_schedule
+            )
 
-            "specialization":
-                doctor.specialization,
-
-            "room_number":
-                doctor.room_number,
-
-            "working_hours":
-                doctor.working_hours,
-
-            "duty_status":
-                doctor.duty_status
-        })
+            result.append({
+                "id": doctor.id,
+                "name": user.name,
+                "specialization": doctor.specialization,
+                "room_number": membership.room_number,
+                "working_hours": schedule_summary or None,
+                "weekly_schedule": weekly_schedule,
+                "duty_status": membership.duty_status,
+                "clinic_id": membership.clinic_id,
+                "clinic_name": membership.clinic.name,
+            })
 
     return {
         "message":
@@ -587,6 +678,7 @@ def get_doctors():
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def get_my_schedule():
     """
     Get doctor's weekly schedule
@@ -634,6 +726,7 @@ def get_my_schedule():
         DoctorSchedule.query
         .filter_by(
             doctor_id=doctor.id,
+            clinic_id=request.clinic_id,
             is_active=True
         )
         .all()
@@ -699,6 +792,7 @@ def get_my_schedule():
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def update_schedule(schedule_id):
     """
     Update doctor weekly schedule
@@ -754,7 +848,7 @@ def update_schedule(schedule_id):
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
-    ).first()
+    ).with_for_update().first()
 
     if not doctor:
         return {
@@ -767,6 +861,7 @@ def update_schedule(schedule_id):
     schedule = DoctorSchedule.query.filter_by(
         id=schedule_id,
         doctor_id=doctor.id,
+        clinic_id=request.clinic_id,
         is_active=True
     ).first()
 
@@ -927,7 +1022,7 @@ def update_schedule(schedule_id):
                 "error"
         }, 400
 
-    duplicate_schedule = (
+    overlapping_schedule = (
         DoctorSchedule.query
         .filter(
             DoctorSchedule.doctor_id
@@ -940,27 +1035,47 @@ def update_schedule(schedule_id):
             .is_(True),
 
             DoctorSchedule.id
-            != schedule.id
+            != schedule.id,
+
+            DoctorSchedule.start_time < end_time,
+            DoctorSchedule.end_time > start_time,
         )
         .first()
     )
 
-    if duplicate_schedule:
+    if overlapping_schedule:
         return {
             "message": (
-                f"An active schedule already "
-                f"exists for {day}"
+                f"This schedule overlaps another clinic "
+                f"schedule on {day}"
             ),
             "status":
                 "error"
+        }, 409
+
+    if has_other_clinic_appointment_conflict(
+        doctor.id,
+        request.clinic_id,
+        day,
+        start_time,
+        end_time
+    ):
+        return {
+            "message": (
+                "This schedule conflicts with an existing "
+                "appointment at another clinic"
+            ),
+            "status": "error",
         }, 409
 
     # --------------------------------------------------------
     # REMEMBER OLD SCHEDULE DAY
     # --------------------------------------------------------
 
-    old_day = (
-        schedule.day_of_week
+    old_schedule_range = (
+        schedule.day_of_week,
+        schedule.start_time,
+        schedule.end_time,
     )
 
     # --------------------------------------------------------
@@ -975,10 +1090,8 @@ def update_schedule(schedule_id):
     )
 
     # --------------------------------------------------------
-    # INVALIDATE OLD GENERATED AVAILABILITY
-    #
-    # Existing future AVAILABLE slots created from the
-    # old or new schedule day must not remain bookable.
+    # INVALIDATE GENERATED AVAILABILITY IN THE OLD AND NEW
+    # TIME RANGES WITHOUT AFFECTING OTHER SHIFTS THAT DAY.
     #
     # BOOKED slots are intentionally preserved.
     # --------------------------------------------------------
@@ -986,10 +1099,11 @@ def update_schedule(schedule_id):
     blocked_future_slots = (
         block_future_available_slots(
             doctor.id,
-            {
-                old_day,
-                day
-            }
+            request.clinic_id,
+            [
+                old_schedule_range,
+                (day, start_time, end_time),
+            ]
         )
     )
 
@@ -1053,6 +1167,7 @@ def update_schedule(schedule_id):
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def deactivate_schedule(schedule_id):
     """
     Deactivate doctor weekly schedule
@@ -1081,7 +1196,7 @@ def deactivate_schedule(schedule_id):
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
-    ).first()
+    ).with_for_update().first()
 
     if not doctor:
         return {
@@ -1094,6 +1209,7 @@ def deactivate_schedule(schedule_id):
     schedule = DoctorSchedule.query.filter_by(
         id=schedule_id,
         doctor_id=doctor.id,
+        clinic_id=request.clinic_id,
         is_active=True
     ).first()
 
@@ -1116,7 +1232,12 @@ def deactivate_schedule(schedule_id):
     blocked_future_slots = (
         block_future_available_slots(
             doctor.id,
-            schedule.day_of_week
+            request.clinic_id,
+            [(
+                schedule.day_of_week,
+                schedule.start_time,
+                schedule.end_time,
+            )]
         )
     )
 
@@ -1157,6 +1278,7 @@ def deactivate_schedule(schedule_id):
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def create_schedule():
     """
     Create doctor weekly schedule
@@ -1210,7 +1332,7 @@ def create_schedule():
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
-    ).first()
+    ).with_for_update().first()
 
     if not doctor:
         return {
@@ -1371,28 +1493,60 @@ def create_schedule():
                 "error"
         }, 400
 
-    existing_schedule = (
+    overlapping_schedule = (
         DoctorSchedule.query
-        .filter_by(
-            doctor_id=doctor.id,
-            day_of_week=day,
-            is_active=True
+        .filter(
+            DoctorSchedule.doctor_id == doctor.id,
+            DoctorSchedule.day_of_week == day,
+            DoctorSchedule.clinic_id == request.clinic_id,
+            DoctorSchedule.is_active.is_(True),
+            DoctorSchedule.start_time < end_time,
+            DoctorSchedule.end_time > start_time,
         )
         .first()
     )
 
-    if existing_schedule:
+    cross_clinic_overlap = (
+        DoctorSchedule.query
+        .filter(
+            DoctorSchedule.doctor_id == doctor.id,
+            DoctorSchedule.day_of_week == day,
+            DoctorSchedule.clinic_id != request.clinic_id,
+            DoctorSchedule.is_active.is_(True),
+            DoctorSchedule.start_time < end_time,
+            DoctorSchedule.end_time > start_time,
+        )
+        .first()
+    )
+
+    if overlapping_schedule or cross_clinic_overlap:
         return {
             "message": (
-                f"An active schedule already "
-                f"exists for {day}"
+                f"This schedule overlaps another active "
+                f"schedule on {day}"
             ),
             "status":
                 "error"
         }, 409
 
+    if has_other_clinic_appointment_conflict(
+        doctor.id,
+        request.clinic_id,
+        day,
+        start_time,
+        end_time
+    ):
+        return {
+            "message": (
+                "This schedule conflicts with an existing "
+                "appointment at another clinic"
+            ),
+            "status": "error",
+        }, 409
+
     schedule = DoctorSchedule(
         doctor_id=doctor.id,
+        clinic_id=request.clinic_id,
         day_of_week=day,
         start_time=start_time,
         end_time=end_time,
@@ -1458,6 +1612,7 @@ def create_schedule():
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def generate_slots():
     """
     Generate appointment slots for a doctor
@@ -1502,7 +1657,7 @@ def generate_slots():
 
     doctor = Doctor.query.filter_by(
         user_id=user_id
-    ).first()
+    ).with_for_update().first()
 
     if not doctor:
         return {
@@ -1579,17 +1734,19 @@ def generate_slots():
         )
     )
 
-    schedule = (
+    schedules = (
         DoctorSchedule.query
         .filter_by(
             doctor_id=doctor.id,
+            clinic_id=request.clinic_id,
             day_of_week=day_name,
             is_active=True
         )
-        .first()
+        .order_by(DoctorSchedule.start_time.asc())
+        .all()
     )
 
-    if not schedule:
+    if not schedules:
         return {
             "message": (
                 "No active schedule found "
@@ -1599,172 +1756,100 @@ def generate_slots():
                 "error"
         }, 404
 
-    # --------------------------------------------------------
-    # EXISTING SLOT SAFETY
-    #
-    # BOOKED:
-    # Never regenerate because a real patient appointment
-    # already exists for this date.
-    #
-    # AVAILABLE:
-    # Prevent normal duplicate generation.
-    #
-    # BLOCKED:
-    # Old schedule slots may safely be removed and replaced.
-    # --------------------------------------------------------
-
-    booked_slots_count = (
+    existing_slots = (
         AppointmentSlot.query
         .filter_by(
             doctor_id=doctor.id,
+            clinic_id=request.clinic_id,
             slot_date=target_date,
-            status="booked"
         )
-        .count()
+        .all()
     )
 
-    if booked_slots_count > 0:
-        return {
-            "message": (
-                "Slots cannot be regenerated because "
-                "booked appointments already exist "
-                "for this date"
-            ),
-            "status":
-                "error"
-        }, 409
-
-    available_slots_count = (
-        AppointmentSlot.query
-        .filter_by(
-            doctor_id=doctor.id,
-            slot_date=target_date,
-            status="available"
-        )
-        .count()
-    )
-
-    if available_slots_count > 0:
-        return {
-            "message": (
-                "Available slots already exist "
-                "for this date"
-            ),
-            "status":
-                "error"
-        }, 409
-# --------------------------------------------------------
-# PRESERVE BLOCKED SLOTS
-#
-# Blocked slots may still be referenced by historical
-# cancelled appointments, so they must not be deleted.
-#
-# New availability will be generated as fresh slot rows.
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # Keep blocked rows for appointment history; generate fresh
+    # availability for any active schedule ranges still missing.
+    # --------------------------------------------------------
     blocked_slots_count = (
-    AppointmentSlot.query
-    .filter_by(
-        doctor_id=doctor.id,
-        slot_date=target_date,
-        status="blocked"
-    )
-    .count()
-)
-
-    # --------------------------------------------------------
-    # INITIAL SLOT RANGE
-    # --------------------------------------------------------
-
-    current = datetime.combine(
-        target_date,
-        schedule.start_time
-    )
-
-    end_datetime = datetime.combine(
-        target_date,
-        schedule.end_time
-    )
-
-    slot_delta = timedelta(
-        minutes=
-            schedule.slot_duration_minutes
+        AppointmentSlot.query
+        .filter_by(
+            doctor_id=doctor.id,
+            clinic_id=request.clinic_id,
+            slot_date=target_date,
+            status="blocked"
+        )
+        .count()
     )
 
     # --------------------------------------------------------
-    # TODAY: SKIP TIMES THAT HAVE ALREADY PASSED
-    # --------------------------------------------------------
-
-    if target_date == today:
-        now = datetime.now()
-
-        while current <= now:
-            current += slot_delta
-
-        if (
-            current + slot_delta
-            > end_datetime
-        ):
-            db.session.rollback()
-
-            return {
-                "message": (
-                    "No future appointment slots "
-                    "remain for today"
-                ),
-                "status":
-                    "error"
-            }, 400
-
-    # --------------------------------------------------------
-    # CREATE SLOTS
-    # --------------------------------------------------------
-
     created_slots = []
 
-    while (
-        current + slot_delta
-        <= end_datetime
-    ):
-        slot_end = (
-            current + slot_delta
+    for schedule in schedules:
+        current = datetime.combine(
+            target_date,
+            schedule.start_time
+        )
+        end_datetime = datetime.combine(
+            target_date,
+            schedule.end_time
+        )
+        slot_delta = timedelta(
+            minutes=schedule.slot_duration_minutes
         )
 
-        slot = AppointmentSlot(
-            doctor_id=doctor.id,
-            slot_date=target_date,
-            start_time=current.time(),
-            end_time=slot_end.time(),
-            status="available",
-            version=1
-        )
+        if target_date == today:
+            now = datetime.now()
+            while current <= now:
+                current += slot_delta
 
-        db.session.add(
-            slot
-        )
-
-        created_slots.append({
-            "start_time": (
-                current.strftime(
-                    "%H:%M"
-                )
-            ),
-
-            "end_time": (
-                slot_end.strftime(
-                    "%H:%M"
-                )
+        while current + slot_delta <= end_datetime:
+            slot_end = current + slot_delta
+            overlaps_existing_slot = any(
+                existing.status != "blocked"
+                and current.time() < existing.end_time
+                and slot_end.time() > existing.start_time
+                for existing in existing_slots
             )
-        })
+            if overlaps_existing_slot:
+                current = slot_end
+                continue
 
-        current = slot_end
+            slot = AppointmentSlot(
+                doctor_id=doctor.id,
+                clinic_id=request.clinic_id,
+                slot_date=target_date,
+                start_time=current.time(),
+                end_time=slot_end.time(),
+                status="available",
+                version=1
+            )
+            db.session.add(slot)
+            existing_slots.append(slot)
+            created_slots.append({
+                "start_time": current.strftime("%H:%M"),
+                "end_time": slot_end.strftime("%H:%M"),
+            })
+            current = slot_end
 
     if not created_slots:
         db.session.rollback()
 
+        existing_reservations = [
+            slot for slot in existing_slots
+            if slot.status in {"available", "booked"}
+        ]
+        if existing_reservations:
+            return {
+                "message": (
+                    "No new slots were generated because the "
+                    "matching slots already exist or are booked"
+                ),
+                "status": "error",
+            }, 409
+
         return {
             "message": (
-                "No appointment slots could be "
-                "generated for this date"
+                "No future appointment slots remain for this date"
             ),
             "status":
                 "error"
@@ -1822,6 +1907,7 @@ def generate_slots():
 )
 @token_required
 @role_required("doctor")
+@clinic_context_required
 def doctor_dashboard():
     """
     Get doctor dashboard
@@ -1861,6 +1947,7 @@ def doctor_dashboard():
         User,
         user_id
     )
+    clinic_membership = request.clinic_membership
 
     today = date.today()
 
@@ -1875,7 +1962,10 @@ def doctor_dashboard():
             == doctor.id,
 
             Appointment.appointment_date
-            == today
+            == today,
+
+            Appointment.clinic_id
+            == request.clinic_id
         )
         .all()
     )
@@ -1916,6 +2006,9 @@ def doctor_dashboard():
             Appointment.appointment_date
             == today,
 
+            Appointment.clinic_id
+            == request.clinic_id,
+
             Appointment.status.in_([
                 "pending",
                 "confirmed"
@@ -1947,6 +2040,9 @@ def doctor_dashboard():
 
             Appointment.appointment_date
             == today,
+
+            Appointment.clinic_id
+            == request.clinic_id,
 
             QueueToken.check_in_time
             .isnot(None),
@@ -1980,6 +2076,9 @@ def doctor_dashboard():
             Appointment.appointment_date
             == today,
 
+            Appointment.clinic_id
+            == request.clinic_id,
+
             Appointment.status.in_([
                 "pending",
                 "confirmed"
@@ -1992,7 +2091,7 @@ def doctor_dashboard():
             .isnot(None)
         )
         .order_by(
-            QueueToken.priority.desc(),
+            queue_priority_rank(QueueToken.priority).asc(),
             QueueToken.token_number.asc()
         )
         .first()
@@ -2024,13 +2123,13 @@ def doctor_dashboard():
                 doctor.specialization,
 
             "room_number":
-                doctor.room_number,
+                clinic_membership.room_number,
 
             "working_hours":
                 doctor.working_hours,
 
             "duty_status":
-                doctor.duty_status
+                clinic_membership.duty_status
         },
 
         "today": {

@@ -1,16 +1,22 @@
 from datetime import date, datetime
 
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 from sqlalchemy import and_, or_
 
 from app import db
 from app.models.appointment import Appointment
 from app.models.appointment_slot import AppointmentSlot
 from app.models.doctor import Doctor
+from app.models.doctor_clinic_membership import DoctorClinicMembership
 from app.models.patient import Patient
 from app.models.queue_token import QueueToken
 from app.models.user import User
-from app.utils.auth import role_required, token_required
+from app.utils.auth import (
+    clinic_context_required,
+    role_required,
+    token_required,
+)
+from app.utils.queue_priority import queue_priority_rank
 
 
 receptionist_bp = Blueprint(
@@ -30,6 +36,7 @@ receptionist_bp = Blueprint(
 )
 @token_required
 @role_required("receptionist")
+@clinic_context_required
 def get_today_appointments():
     """
     Get today's appointments for receptionist
@@ -54,7 +61,8 @@ def get_today_appointments():
     appointments = (
         Appointment.query
         .filter(
-            Appointment.appointment_date == today
+            Appointment.appointment_date == today,
+            Appointment.clinic_id == request.clinic_id,
         )
         .outerjoin(
             AppointmentSlot,
@@ -105,6 +113,12 @@ def get_today_appointments():
                 User,
                 doctor.user_id
             )
+
+        doctor_membership = DoctorClinicMembership.query.filter_by(
+            doctor_id=appointment.doctor_id,
+            clinic_id=appointment.clinic_id,
+            status="active",
+        ).first()
 
         # ----------------------------------------------------
         # SLOT
@@ -220,8 +234,8 @@ def get_today_appointments():
                 ),
 
                 "room_number": (
-                    doctor.room_number
-                    if doctor
+                    doctor_membership.room_number
+                    if doctor_membership
                     else None
                 )
             },
@@ -316,6 +330,7 @@ def get_today_appointments():
 )
 @token_required
 @role_required("receptionist")
+@clinic_context_required
 def check_in_patient(
     appointment_id
 ):
@@ -347,7 +362,8 @@ def check_in_patient(
     appointment = (
         Appointment.query
         .filter_by(
-            id=appointment_id
+            id=appointment_id,
+            clinic_id=request.clinic_id,
         )
         .with_for_update()
         .first()
@@ -518,6 +534,7 @@ def check_in_patient(
 )
 @token_required
 @role_required("receptionist")
+@clinic_context_required
 def get_emergency_options():
     """
     Get existing patients and on-duty doctors for emergency walk-in
@@ -565,9 +582,13 @@ def get_emergency_options():
         )
         .filter(
             or_(
-                Patient.user_id.is_(None),
+                and_(
+                    Patient.user_id.is_(None),
+                    Patient.clinic_id == request.clinic_id,
+                ),
 
                 and_(
+                    Patient.user_id.isnot(None),
                     User.role == "patient",
                     User.status == "active"
                 )
@@ -666,6 +687,10 @@ def get_emergency_options():
     doctors = (
         Doctor.query
         .join(
+            DoctorClinicMembership,
+            DoctorClinicMembership.doctor_id == Doctor.id
+        )
+        .join(
             User,
             Doctor.user_id
             == User.id
@@ -673,7 +698,9 @@ def get_emergency_options():
         .filter(
             User.role == "doctor",
             User.status == "active",
-            Doctor.duty_status == "on_duty"
+            DoctorClinicMembership.clinic_id == request.clinic_id,
+            DoctorClinicMembership.status == "active",
+            DoctorClinicMembership.duty_status == "on_duty",
         )
         .order_by(
             User.name.asc()
@@ -705,11 +732,19 @@ def get_emergency_options():
             "specialization":
                 doctor.specialization,
 
-            "room_number":
-                doctor.room_number,
+            "room_number": (
+                DoctorClinicMembership.query
+                .filter_by(
+                    doctor_id=doctor.id,
+                    clinic_id=request.clinic_id,
+                    status="active",
+                )
+                .first()
+                .room_number
+            ),
 
             "duty_status":
-                doctor.duty_status
+                "on_duty"
         })
 
     return {
@@ -738,8 +773,13 @@ def get_emergency_options():
     "/emergency/walk-in",
     methods=["POST"]
 )
+@receptionist_bp.route(
+    "/walk-in",
+    methods=["POST"]
+)
 @token_required
 @role_required("receptionist")
+@clinic_context_required
 def create_emergency_walk_in():
     """
     Create emergency walk-in for an existing or new patient
@@ -828,10 +868,23 @@ def create_emergency_walk_in():
 
     emergency_reason = str(
         data.get(
-            "emergency_reason",
-            ""
+            "emergency_reason"
         )
+        or data.get("reason")
+        or ""
     ).strip()
+
+    is_emergency = (
+        request.path.endswith("/emergency/walk-in")
+    )
+    queue_priority = (
+        "urgent" if is_emergency else "normal"
+    )
+
+    # Emergency cases require a reason. A routine front-desk
+    # walk-in may optionally include a visit note.
+    if not is_emergency and not emergency_reason:
+        emergency_reason = None
 
     # --------------------------------------------------------
     # BASIC VALIDATION
@@ -847,7 +900,7 @@ def create_emergency_walk_in():
 
         }, 400
 
-    if not emergency_reason:
+    if is_emergency and not emergency_reason:
         return {
             "message":
                 "emergency_reason is required",
@@ -857,24 +910,24 @@ def create_emergency_walk_in():
 
         }, 400
 
-    if len(
+    if emergency_reason is not None and len(
         emergency_reason
     ) < 3:
         return {
             "message":
-                "Emergency reason is too short",
+                "Visit reason is too short",
 
             "status":
                 "error"
 
         }, 400
 
-    if len(
+    if emergency_reason is not None and len(
         emergency_reason
     ) > 1000:
         return {
             "message": (
-                "Emergency reason must not "
+                "Visit reason must not "
                 "exceed 1000 characters"
             ),
 
@@ -891,7 +944,7 @@ def create_emergency_walk_in():
         return {
             "message": (
                 "Choose either an existing patient "
-                "or create a new emergency patient"
+                "or create a new front-desk patient"
             ),
 
             "status":
@@ -1137,11 +1190,12 @@ def create_emergency_walk_in():
         else:
 
             # ------------------------------------------------
-            # QUICK EMERGENCY REGISTRATION
+            # QUICK FRONT-DESK REGISTRATION
             # ------------------------------------------------
 
             patient = Patient(
                 user_id=None,
+                clinic_id=request.clinic_id,
                 name=new_name,
                 contact=new_contact,
                 age=new_age,
@@ -1174,333 +1228,184 @@ def create_emergency_walk_in():
         )
 
         if not doctor:
-
             db.session.rollback()
-
             return {
-                "message":
-                    "Doctor not found",
-
-                "status":
-                    "error"
-
+                "message": "Doctor not found",
+                "status": "error",
             }, 404
 
-        doctor_user = (
-            db.session.get(
-                User,
-                doctor.user_id
-            )
+        doctor_user = db.session.get(
+            User,
+            doctor.user_id
         )
 
         if (
             not doctor_user
-            or doctor_user.role
-            != "doctor"
-            or doctor_user.status
-            != "active"
+            or doctor_user.role != "doctor"
+            or doctor_user.status != "active"
         ):
             db.session.rollback()
-
             return {
-                "message": (
-                    "Doctor account "
-                    "is not active"
-                ),
-
-                "status":
-                    "error"
-
+                "message": "Doctor account is not active",
+                "status": "error",
             }, 400
 
-        # Emergency requires currently on-duty doctor.
-        if (
-            doctor.duty_status
-            != "on_duty"
-        ):
+        doctor_membership = (
+            DoctorClinicMembership.query
+            .filter_by(
+                doctor_id=doctor.id,
+                clinic_id=request.clinic_id,
+                status="active",
+            )
+            .with_for_update()
+            .first()
+        )
+
+        if not doctor_membership:
             db.session.rollback()
-
             return {
-                "message": (
-                    "Selected doctor is "
-                    "currently off duty"
-                ),
+                "message": "Doctor is not assigned to this clinic",
+                "status": "error",
+            }, 403
 
-                "status":
-                    "error"
-
+        if doctor_membership.duty_status != "on_duty":
+            db.session.rollback()
+            return {
+                "message": "Selected doctor is currently off duty",
+                "status": "error",
             }, 400
 
-        # ----------------------------------------------------
-        # DUPLICATE ACTIVE EMERGENCY
-        # ----------------------------------------------------
-
-        existing_emergency = (
+        existing_walk_in = (
             Appointment.query
             .join(
                 QueueToken,
-                QueueToken.appointment_id
-                == Appointment.id
+                QueueToken.appointment_id == Appointment.id
             )
             .filter(
-                Appointment.patient_id
-                == patient.id,
-
-                Appointment.doctor_id
-                == doctor.id,
-
-                Appointment.appointment_date
-                == today,
-
-                Appointment.booking_source
-                == "walk_in",
-
+                Appointment.patient_id == patient.id,
+                Appointment.doctor_id == doctor.id,
+                Appointment.clinic_id == request.clinic_id,
+                Appointment.appointment_date == today,
+                Appointment.booking_source == "walk_in",
                 Appointment.status.in_([
                     "pending",
                     "confirmed",
-                    "in_progress"
+                    "in_progress",
                 ]),
-
                 QueueToken.status.in_([
                     "waiting",
                     "called",
-                    "in_consultation"
-                ])
+                    "in_consultation",
+                ]),
             )
             .first()
         )
 
-        if existing_emergency:
-
+        if existing_walk_in:
             db.session.rollback()
-
             return {
                 "message": (
-                    "This patient already has "
-                    "an active emergency case "
+                    "This patient already has an active walk-in "
                     "with this doctor today"
                 ),
-
-                "status":
-                    "error"
-
+                "status": "error",
             }, 409
-
-        # ----------------------------------------------------
-        # NEXT TOKEN NUMBER
-        # ----------------------------------------------------
 
         last_token = (
             db.session.query(
-                db.func.max(
-                    QueueToken.token_number
-                )
+                db.func.max(QueueToken.token_number)
             )
             .join(
                 Appointment,
-                QueueToken.appointment_id
-                == Appointment.id
+                QueueToken.appointment_id == Appointment.id
             )
             .filter(
-                QueueToken.doctor_id
-                == doctor.id,
-
-                Appointment.appointment_date
-                == today
+                QueueToken.doctor_id == doctor.id,
+                Appointment.clinic_id == request.clinic_id,
+                Appointment.appointment_date == today
             )
             .scalar()
         )
-
-        next_token = (
-            last_token or 0
-        ) + 1
-
-        # ----------------------------------------------------
-        # WALK-IN APPOINTMENT
-        # ----------------------------------------------------
+        next_token = (last_token or 0) + 1
 
         appointment = Appointment(
-            patient_id=
-                patient.id,
-
-            doctor_id=
-                doctor.id,
-
-            slot_id=
-                None,
-
-            appointment_date=
-                today,
-
-            appointment_type=
-                "in_person",
-
-            booking_source=
-                "walk_in",
-
-            status=
-                "confirmed",
-
-            notes=
-                emergency_reason
+            patient_id=patient.id,
+            doctor_id=doctor.id,
+            clinic_id=request.clinic_id,
+            slot_id=None,
+            appointment_date=today,
+            appointment_type="in_person",
+            booking_source="walk_in",
+            status="confirmed",
+            notes=emergency_reason,
         )
-
-        db.session.add(
-            appointment
-        )
-
+        db.session.add(appointment)
         db.session.flush()
 
-        # ----------------------------------------------------
-        # URGENT + AUTOMATIC CHECK-IN
-        # ----------------------------------------------------
-
         queue = QueueToken(
-            appointment_id=
-                appointment.id,
-
-            doctor_id=
-                doctor.id,
-
-            patient_id=
-                patient.id,
-
-            token_number=
-                next_token,
-
-            priority=
-                "urgent",
-
-            status=
-                "waiting",
-
-            check_in_time=
-                datetime.utcnow()
+            appointment_id=appointment.id,
+            doctor_id=doctor.id,
+            patient_id=patient.id,
+            token_number=next_token,
+            priority=queue_priority,
+            status="waiting",
+            check_in_time=datetime.utcnow(),
         )
-
-        db.session.add(
-            queue
-        )
-
-        # New Patient + Appointment + Queue are committed
-        # together, so failure rolls all of them back.
+        db.session.add(queue)
         db.session.commit()
 
         return {
-            "message":
-                "Emergency walk-in created successfully",
-
-            "status":
-                "success",
-
+            "message": (
+                "Emergency walk-in created successfully"
+                if is_emergency
+                else "Front-desk walk-in created successfully"
+            ),
+            "status": "success",
             "appointment": {
-                "id":
-                    appointment.id,
-
-                "appointment_date":
-                    appointment
-                    .appointment_date
-                    .isoformat(),
-
-                "appointment_type":
-                    appointment
-                    .appointment_type,
-
-                "booking_source":
-                    appointment
-                    .booking_source,
-
-                "slot_id":
-                    appointment.slot_id,
-
-                "status":
-                    appointment.status,
-
-                "emergency_reason":
-                    appointment.notes
+                "id": appointment.id,
+                "appointment_date": appointment.appointment_date.isoformat(),
+                "appointment_type": appointment.appointment_type,
+                "booking_source": appointment.booking_source,
+                "slot_id": appointment.slot_id,
+                "status": appointment.status,
+                "emergency_reason": appointment.notes,
             },
-
             "patient": {
-                "id":
-                    patient.id,
-
-                "name":
-                    patient_name,
-
-                "contact":
-                    patient.contact,
-
-                "age":
-                    patient.age,
-
-                "gender":
-                    patient.gender,
-
+                "id": patient.id,
+                "name": patient_name,
+                "contact": patient.contact,
+                "age": patient.age,
+                "gender": patient.gender,
                 "patient_type": (
-                    "registered"
-                    if patient.user_id
-                    else "front_desk"
-                )
+                    "registered" if patient.user_id else "front_desk"
+                ),
             },
-
             "doctor": {
-                "id":
-                    doctor.id,
-
-                "name":
-                    doctor_user.name,
-
-                "specialization":
-                    doctor.specialization,
-
-                "room_number":
-                    doctor.room_number,
-
-                "duty_status":
-                    doctor.duty_status
+                "id": doctor.id,
+                "name": doctor_user.name,
+                "specialization": doctor.specialization,
+                "room_number": doctor_membership.room_number,
+                "duty_status": doctor_membership.duty_status,
             },
-
             "queue": {
-                "id":
-                    queue.id,
-
-                "token_number":
-                    queue.token_number,
-
-                "priority":
-                    queue.priority,
-
-                "status":
-                    queue.status,
-
-                "checked_in":
-                    True,
-
-                "check_in_time":
-                    queue
-                    .check_in_time
-                    .isoformat()
-            }
-
+                "id": queue.id,
+                "token_number": queue.token_number,
+                "priority": queue.priority,
+                "status": queue.status,
+                "checked_in": True,
+                "check_in_time": queue.check_in_time.isoformat(),
+            },
         }, 201
 
     except Exception:
-
         db.session.rollback()
-
+        current_app.logger.exception("Failed to create front-desk walk-in")
         return {
-            "message":
-                "Failed to create emergency walk-in",
-
-            "status":
-                "error"
-
+            "message": "Failed to create walk-in appointment",
+            "status": "error",
         }, 500
 
 
-# ============================================================
-# RECEPTIONIST - UPDATE QUEUE PRIORITY
-# ============================================================
 
 @receptionist_bp.route(
     "/queue/<int:queue_id>/priority",
@@ -1508,11 +1413,12 @@ def create_emergency_walk_in():
 )
 @token_required
 @role_required("receptionist")
+@clinic_context_required
 def update_queue_priority(
     queue_id
 ):
     """
-    Mark a checked-in waiting patient as normal or urgent
+    Set a checked-in waiting patient's priority
     ---
     tags:
       - Receptionist
@@ -1538,6 +1444,7 @@ def update_queue_priority(
               enum:
                 - normal
                 - urgent
+                - critical
               example: urgent
     responses:
       200:
@@ -1569,12 +1476,13 @@ def update_queue_priority(
 
     if priority not in [
         "normal",
-        "urgent"
+        "urgent",
+        "critical",
     ]:
         return {
             "message": (
                 "priority must be "
-                "normal or urgent"
+                "normal, urgent or critical"
             ),
 
             "status":
@@ -1610,10 +1518,12 @@ def update_queue_priority(
     # --------------------------------------------------------
 
     appointment = (
-        db.session.get(
-            Appointment,
-            queue.appointment_id
+        Appointment.query
+        .filter_by(
+            id=queue.appointment_id,
+            clinic_id=request.clinic_id,
         )
+        .first()
     )
 
     if not appointment:
@@ -1704,10 +1614,7 @@ def update_queue_priority(
 
         return {
             "message": (
-                "Patient marked as urgent successfully"
-                if priority == "urgent"
-                else
-                "Patient priority changed to normal"
+                f"Patient priority set to {priority}"
             ),
 
             "status":
@@ -1753,6 +1660,7 @@ def update_queue_priority(
 )
 @token_required
 @role_required("receptionist")
+@clinic_context_required
 def get_today_live_queue():
     """
     Get today's checked-in live clinic queue
@@ -1784,12 +1692,15 @@ def get_today_live_queue():
             Appointment.appointment_date
             == today,
 
+            Appointment.clinic_id
+            == request.clinic_id,
+
             QueueToken.check_in_time
             .isnot(None)
         )
         .order_by(
             QueueToken.doctor_id.asc(),
-            QueueToken.priority.desc(),
+            queue_priority_rank(QueueToken.priority).asc(),
             QueueToken.token_number.asc()
         )
         .all()
@@ -1833,6 +1744,14 @@ def get_today_live_queue():
                 User,
                 doctor.user_id
             )
+
+        doctor_membership = (
+            DoctorClinicMembership.query.filter_by(
+                doctor_id=queue.doctor_id,
+                clinic_id=appointment.clinic_id if appointment else None,
+                status="active",
+            ).first()
+        )
 
         # ----------------------------------------------------
         # SLOT
@@ -1979,8 +1898,8 @@ def get_today_live_queue():
                 ),
 
                 "room_number": (
-                    doctor.room_number
-                    if doctor
+                    doctor_membership.room_number
+                    if doctor_membership
                     else None
                 )
             },

@@ -16,6 +16,13 @@ class DoctorSchedule(db.Model):
         nullable=False
     )
 
+    clinic_id = db.Column(
+        db.Integer,
+        db.ForeignKey("clinics.id"),
+        nullable=False,
+        index=True
+    )
+
     day_of_week = db.Column(
         db.Enum(
             "Monday",

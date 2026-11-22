@@ -12,6 +12,13 @@ class AppointmentSlot(db.Model):
         nullable=False
     )
 
+    clinic_id = db.Column(
+        db.Integer,
+        db.ForeignKey("clinics.id"),
+        nullable=False,
+        index=True
+    )
+
     slot_date = db.Column(
         db.Date,
         nullable=False

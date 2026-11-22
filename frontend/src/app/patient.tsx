@@ -28,6 +28,7 @@ type Appointment = {
     specialization?: string;
   };
   doctor_name?: string;
+  clinic_name?: string;
   specialization?: string;
   token_number?: number;
   queue_token?: number;
@@ -240,6 +241,11 @@ const upcomingAppointment =
                       upcomingAppointment.specialization ||
                       "Medical Consultation"}
                   </Text>
+                  {upcomingAppointment.clinic_name ? (
+                    <Text style={styles.specialization}>
+                      {upcomingAppointment.clinic_name}
+                    </Text>
+                  ) : null}
                 </View>
 
                 <View style={styles.statusBadge}>

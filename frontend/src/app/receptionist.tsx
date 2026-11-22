@@ -16,6 +16,7 @@ import {
 import {
   Ionicons,
 } from "@expo/vector-icons";
+import { apiRequest } from "../api/client";
 
 import {
   type Href,
@@ -26,6 +27,17 @@ import {
   clearAuth,
   getUser,
 } from "../storage/authStorage";
+import {
+  getSelectedClinicId,
+  setSelectedClinicId,
+} from "../storage/clinicStorage";
+
+type ReceptionistClinic = {
+  clinic_id: number;
+  clinic_name: string;
+  role: string;
+  status: string;
+};
 
 
 export default function ReceptionistScreen() {
@@ -39,6 +51,11 @@ export default function ReceptionistScreen() {
     null
   );
 
+  const [clinics, setClinics] =
+    useState<ReceptionistClinic[]>([]);
+  const [selectedClinicId, setSelectedClinicIdState] =
+    useState<number | null>(null);
+  const [clinicError, setClinicError] = useState("");
 
   useEffect(() => {
     const loadUser =
@@ -49,10 +66,52 @@ export default function ReceptionistScreen() {
         setUser(
           storedUser
         );
+
+        try {
+          const response = await apiRequest(
+            "/api/clinics/my"
+          );
+          const activeClinics: ReceptionistClinic[] =
+            Array.isArray(response?.clinics)
+              ? response.clinics.filter(
+                  (item: ReceptionistClinic) =>
+                    item.role === "receptionist" &&
+                    item.status === "active"
+                )
+              : [];
+          setClinics(activeClinics);
+
+          const savedClinicId =
+            await getSelectedClinicId();
+          const clinicId = activeClinics.some(
+            (item) => item.clinic_id === savedClinicId
+          )
+            ? savedClinicId
+            : activeClinics[0]?.clinic_id ?? null;
+
+          if (clinicId) {
+            await setSelectedClinicId(clinicId);
+            setSelectedClinicIdState(clinicId);
+          } else {
+            setClinicError(
+              "Your account is not assigned to an active clinic. Please contact the Clinic Admin."
+            );
+          }
+        } catch (requestError: any) {
+          setClinicError(
+            requestError?.message ||
+              "Unable to load your clinic assignment."
+          );
+        }
       };
 
     loadUser();
   }, []);
+
+  const handleClinicSelect = async (clinicId: number) => {
+    await setSelectedClinicId(clinicId);
+    setSelectedClinicIdState(clinicId);
+  };
 
 
   // =========================================================
@@ -242,6 +301,50 @@ export default function ReceptionistScreen() {
           </View>
         </View>
 
+        <View style={styles.clinicContext}>
+          <Text style={styles.clinicContextLabel}>
+            CURRENT CLINIC
+          </Text>
+          {clinics.length > 1 ? (
+            <View style={styles.clinicOptions}>
+              {clinics.map((clinic) => (
+                <Pressable
+                  key={clinic.clinic_id}
+                  onPress={() =>
+                    handleClinicSelect(clinic.clinic_id)
+                  }
+                  style={[
+                    styles.clinicOption,
+                    clinic.clinic_id === selectedClinicId &&
+                      styles.clinicOptionSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.clinicOptionText,
+                      clinic.clinic_id === selectedClinicId &&
+                        styles.clinicOptionTextSelected,
+                    ]}
+                  >
+                    {clinic.clinic_name}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          <Text style={styles.clinicContextName}>
+            {clinics.find(
+              (clinic) =>
+                clinic.clinic_id === selectedClinicId
+            )?.clinic_name || clinics[0]?.clinic_name || "No clinic selected"}
+          </Text>
+          {clinicError ? (
+            <Text style={styles.clinicContextError}>
+              {clinicError}
+            </Text>
+          ) : null}
+        </View>
+
 
         {/* ================================================= */}
         {/* OPERATIONS */}
@@ -316,6 +419,19 @@ export default function ReceptionistScreen() {
   }
 />
 
+
+{/* EMERGENCY WALK-IN */}
+
+<OperationRow
+  icon="person-add-outline"
+  title="Front-Desk Walk-In"
+  subtitle="Register a regular patient without an app account and add them to the normal queue"
+  onPress={() =>
+    router.push(
+      "/receptionist-walk-in" as Href
+    )
+  }
+/>
 
 {/* EMERGENCY WALK-IN */}
 
@@ -575,6 +691,56 @@ const styles =
       flexDirection: "row",
       alignItems: "center",
       marginBottom: 24,
+    },
+    clinicContext: {
+      padding: 14,
+      marginBottom: 16,
+      backgroundColor: "#ECFDF5",
+      borderWidth: 1,
+      borderColor: "#A7F3D0",
+      borderRadius: 14,
+    },
+    clinicContextLabel: {
+      color: "#0F766E",
+      fontSize: 10,
+      fontWeight: "900",
+    },
+    clinicOptions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+      marginTop: 9,
+    },
+    clinicOption: {
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderWidth: 1,
+      borderColor: "#99F6E4",
+      borderRadius: 9,
+      backgroundColor: "#FFFFFF",
+    },
+    clinicOptionSelected: {
+      backgroundColor: "#0F766E",
+      borderColor: "#0F766E",
+    },
+    clinicOptionText: {
+      color: "#134E4A",
+      fontSize: 11,
+      fontWeight: "700",
+    },
+    clinicOptionTextSelected: {
+      color: "#FFFFFF",
+    },
+    clinicContextName: {
+      color: "#134E4A",
+      fontSize: 16,
+      fontWeight: "900",
+      marginTop: 8,
+    },
+    clinicContextError: {
+      color: "#B91C1C",
+      fontSize: 12,
+      marginTop: 8,
     },
 
     welcomeIcon: {

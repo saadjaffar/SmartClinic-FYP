@@ -6,11 +6,14 @@ from sqlalchemy import and_, or_
 from app import db
 from app.models.appointment import Appointment
 from app.models.appointment_slot import AppointmentSlot
+from app.models.clinic import Clinic
 from app.models.doctor import Doctor
+from app.models.doctor_clinic_membership import DoctorClinicMembership
 from app.models.patient import Patient
 from app.models.queue_token import QueueToken
 from app.models.user import User
 from app.utils.auth import role_required, token_required
+from app.utils.queue_priority import queue_priority_rank
 
 
 patient_bp = Blueprint(
@@ -597,6 +600,10 @@ def patient_dashboard():
         doctor_name = None
         specialization = None
         room_number = None
+        clinic = db.session.get(
+            Clinic,
+            appointment.clinic_id
+        )
 
         if doctor:
             doctor_user = db.session.get(
@@ -613,8 +620,14 @@ def patient_dashboard():
                 doctor.specialization
             )
 
+            membership = DoctorClinicMembership.query.filter_by(
+                doctor_id=doctor.id,
+                clinic_id=appointment.clinic_id,
+            ).first()
             room_number = (
-                doctor.room_number
+                membership.room_number
+                if membership
+                else None
             )
 
         # ----------------------------------------------------
@@ -663,6 +676,15 @@ def patient_dashboard():
 
             "room_number":
                 room_number,
+
+            "clinic_id":
+                appointment.clinic_id,
+
+            "clinic_name": (
+                clinic.name
+                if clinic
+                else None
+            ),
 
             "appointment_date": (
                 appointment
@@ -731,30 +753,21 @@ def patient_dashboard():
             # normal-token patients.
             # ------------------------------------------------
 
-            if queue.priority == "urgent":
-
-                priority_filter = and_(
-                    QueueToken.priority
-                    == "urgent",
-
-                    QueueToken.token_number
-                    < queue.token_number
-                )
-
-            else:
-
-                priority_filter = or_(
-                    QueueToken.priority
-                    == "urgent",
-
-                    and_(
-                        QueueToken.priority
-                        == "normal",
-
-                        QueueToken.token_number
-                        < queue.token_number
-                    )
-                )
+            current_priority_rank = {
+                "critical": 0,
+                "urgent": 1,
+                "normal": 2,
+            }[queue.priority]
+            other_priority_rank = queue_priority_rank(
+                QueueToken.priority
+            )
+            priority_filter = or_(
+                other_priority_rank < current_priority_rank,
+                and_(
+                    other_priority_rank == current_priority_rank,
+                    QueueToken.token_number < queue.token_number,
+                ),
+            )
 
             waiting_ahead = (
                 QueueToken.query
@@ -769,6 +782,9 @@ def patient_dashboard():
 
                     Appointment.appointment_date
                     == today,
+
+                    Appointment.clinic_id
+                    == appointment.clinic_id,
 
                     QueueToken.status.in_([
                         "waiting",
@@ -798,6 +814,9 @@ def patient_dashboard():
 
                     Appointment.appointment_date
                     == today,
+
+                    Appointment.clinic_id
+                    == appointment.clinic_id,
 
                     QueueToken.status.in_([
                         "called",

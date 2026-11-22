@@ -34,3 +34,8 @@ class Config:
     )
 
     MAIL_FROM = os.getenv("MAIL_FROM")
+
+    APP_BASE_URL = os.getenv(
+        "APP_BASE_URL",
+        "http://localhost:8081"
+    )
