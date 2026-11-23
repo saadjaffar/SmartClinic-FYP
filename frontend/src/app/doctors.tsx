@@ -340,7 +340,9 @@ export default function DoctorsScreen() {
                     <DoctorCard
                       key={`${doctor.id}-${doctor.clinic_id}`}
                       doctor={doctor}
-                      onPress={() => {}}
+                      onPress={() =>
+                        openBooking(doctor)
+                      }
                     />
                   ))}
                 </View>
