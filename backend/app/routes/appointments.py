@@ -411,12 +411,18 @@ def book_appointment():
                     "error"
             }, 404
 
+        # Serialize booking with Super Admin clinic deactivation.
+        clinic = (
+            Clinic.query
+            .filter_by(id=clinic_id)
+            .with_for_update()
+            .first()
+        )
         membership = DoctorClinicMembership.query.filter_by(
             doctor_id=doctor.id,
             clinic_id=clinic_id,
             status="active",
         ).first()
-        clinic = db.session.get(Clinic, clinic_id)
         if not membership or not clinic or clinic.status != "active":
             db.session.rollback()
             return {
@@ -991,6 +997,12 @@ def my_appointments():
 
             "queue_status": (
                 queue.status
+                if queue
+                else None
+            ),
+
+            "queue_checked_in": (
+                bool(queue.check_in_time)
                 if queue
                 else None
             ),

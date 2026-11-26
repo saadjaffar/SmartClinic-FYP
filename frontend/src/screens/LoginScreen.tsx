@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -250,20 +251,19 @@ if (
 
   return (
     <KeyboardAvoidingView
-      style={
-        styles.container
-      }
-      behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : undefined
-      }
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={0}
     >
-      <View
-        style={
-          styles.card
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={
+          Platform.OS === "ios" ? "interactive" : "on-drag"
         }
+        showsVerticalScrollIndicator={false}
       >
+        <View style={styles.card}>
         {/* ================================================= */}
         {/* LOGO */}
         {/* ================================================= */}
@@ -572,7 +572,8 @@ if (
             SmartClinic
           </Text>
         </View>
-      </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -586,10 +587,13 @@ const styles =
   StyleSheet.create({
     container: {
       flex: 1,
-      justifyContent:
-        "center",
       backgroundColor:
         "#F5F7FA",
+    },
+
+    scrollContent: {
+      flexGrow: 1,
+      justifyContent: "center",
       padding: 20,
     },
 

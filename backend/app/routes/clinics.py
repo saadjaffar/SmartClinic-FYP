@@ -13,6 +13,7 @@ from app.models.clinic import Clinic
 from app.models.clinic_staff_membership import ClinicStaffMembership
 from app.models.doctor import Doctor
 from app.models.doctor_clinic_membership import DoctorClinicMembership
+from app.models.queue_token import QueueToken
 from app.models.user import User
 from app.utils.auth import (
     hash_password,
@@ -73,6 +74,101 @@ def list_clinics():
             }
             for clinic in clinics
         ],
+    }, 200
+
+
+@clinic_bp.route("/<int:clinic_id>/status", methods=["PATCH"])
+@token_required
+@role_required("admin")
+def update_clinic_status(clinic_id):
+    data = request.get_json(silent=True) or {}
+    requested_status = str(data.get("status", "")).strip().lower()
+
+    if requested_status not in {"active", "inactive"}:
+        return {
+            "message": "status must be active or inactive",
+            "status": "error",
+        }, 400
+
+    clinic = (
+        Clinic.query
+        .filter_by(id=clinic_id)
+        .with_for_update()
+        .first()
+    )
+    if not clinic:
+        return {
+            "message": "Clinic not found",
+            "status": "error",
+        }, 404
+
+    if requested_status == clinic.status:
+        return {
+            "message": f"Clinic is already {requested_status}",
+            "status": "success",
+            "clinic": {
+                "id": clinic.id,
+                "name": clinic.name,
+                "status": clinic.status,
+            },
+        }, 200
+
+    if requested_status == "inactive":
+        today = date.today()
+        unresolved_appointments = Appointment.query.filter(
+            Appointment.clinic_id == clinic_id,
+            Appointment.status.in_(["pending", "confirmed", "in_progress"]),
+            or_(
+                Appointment.appointment_date >= today,
+                Appointment.status == "in_progress",
+            ),
+        ).count()
+        active_queue_entries = (
+            QueueToken.query
+            .join(Appointment, QueueToken.appointment_id == Appointment.id)
+            .filter(
+                Appointment.clinic_id == clinic_id,
+                QueueToken.status.in_(
+                    ["waiting", "called", "in_consultation"]
+                ),
+            )
+            .count()
+        )
+
+        if unresolved_appointments or active_queue_entries:
+            db.session.rollback()
+            return {
+                "message": (
+                    "Clinic cannot be deactivated while it has "
+                    "upcoming or in-progress appointments, or an active queue"
+                ),
+                "status": "error",
+                "unresolved_appointments": unresolved_appointments,
+                "active_queue_entries": active_queue_entries,
+            }, 409
+
+    clinic.status = requested_status
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception(
+            "Failed to update clinic status for clinic_id=%s",
+            clinic_id,
+        )
+        return {
+            "message": "Unable to update clinic status",
+            "status": "error",
+        }, 500
+
+    return {
+        "message": f"Clinic {requested_status} successfully",
+        "status": "success",
+        "clinic": {
+            "id": clinic.id,
+            "name": clinic.name,
+            "status": clinic.status,
+        },
     }, 200
 
 

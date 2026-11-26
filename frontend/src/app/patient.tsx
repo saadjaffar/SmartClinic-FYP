@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 
 import { apiRequest } from "../api/client";
 import { clearAuth, getUser } from "../storage/authStorage";
@@ -19,6 +19,7 @@ type Appointment = {
   id: number;
   appointment_date?: string;
   appointment_time?: string;
+  booking_source?: "scheduled" | "walk_in";
   status?: string;
   appointment_type?: string;
   notes?: string;
@@ -33,6 +34,20 @@ type Appointment = {
   token_number?: number;
   queue_token?: number;
 };
+
+function getAppointmentTimestamp(appointment: Appointment) {
+  if (!appointment.appointment_date) {
+    return Number.NEGATIVE_INFINITY;
+  }
+
+  const time = appointment.appointment_time || "00:00";
+  const normalizedTime =
+    time.split(":").length === 2 ? `${time}:00` : time;
+
+  return new Date(
+    `${appointment.appointment_date}T${normalizedTime}`
+  ).getTime();
+}
 
 export default function PatientScreen() {
   const router = useRouter();
@@ -73,9 +88,11 @@ export default function PatientScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
+  useFocusEffect(
+    useCallback(() => {
+      loadDashboard();
+    }, [loadDashboard])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -117,27 +134,41 @@ const handleLogout = () => {
   );
 };
 
+  const now = Date.now();
+  const localDate = new Date();
+  const today = [
+    localDate.getFullYear(),
+    String(localDate.getMonth() + 1).padStart(2, "0"),
+    String(localDate.getDate()).padStart(2, "0"),
+  ].join("-");
   const upcomingAppointments = appointments
-  .filter(
-    (appointment) =>
-      appointment.status !== "completed" &&
-      appointment.status !== "cancelled" &&
-      appointment.status !== "no_show"
-  )
-  .sort((a, b) => {
-    const dateTimeA = new Date(
-      `${a.appointment_date}T${a.appointment_time || "00:00"}:00`
-    ).getTime();
+    .filter((appointment) => {
+      if (
+        !["pending", "confirmed", "in_progress"].includes(
+          appointment.status || ""
+        )
+      ) {
+        return false;
+      }
 
-    const dateTimeB = new Date(
-      `${b.appointment_date}T${b.appointment_time || "00:00"}:00`
-    ).getTime();
+      if (appointment.status === "in_progress") {
+        return true;
+      }
 
-    return dateTimeA - dateTimeB;
-  });
+      if (appointment.booking_source === "walk_in") {
+        const appointmentDate = appointment.appointment_date;
+        return appointmentDate ? appointmentDate >= today : false;
+      }
 
-const upcomingAppointment =
-  upcomingAppointments[0];
+      return getAppointmentTimestamp(appointment) > now;
+    })
+    .sort(
+      (a, b) =>
+        getAppointmentTimestamp(a) -
+        getAppointmentTimestamp(b)
+    );
+
+  const upcomingAppointment = upcomingAppointments[0];
 
   const patientName =
     user?.name ||

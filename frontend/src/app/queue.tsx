@@ -447,8 +447,8 @@ appointment.emergency_reason ? (
         </Text>
 
         <Text style={styles.scheduledNoticeText}>
-          Live queue position, people ahead and now-serving
-          information will appear on your appointment day.
+          After the receptionist checks you in on your appointment day,
+          you can see your live queue position and people ahead.
         </Text>
       </View>
     </View>
@@ -557,8 +557,8 @@ function FutureQueueCard({
       </Text>
 
       <Text style={styles.futureText}>
-        Live queue tracking will become
-        available on your appointment day.
+        Live queue tracking starts after the receptionist checks you in
+        on your appointment day.
       </Text>
 
       <View style={styles.futureTokenBox}>

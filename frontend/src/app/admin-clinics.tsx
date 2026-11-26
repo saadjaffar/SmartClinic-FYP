@@ -41,6 +41,7 @@ export default function AdminClinicsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [updatingClinicId, setUpdatingClinicId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const loadClinics = useCallback(async () => {
@@ -124,6 +125,67 @@ export default function AdminClinicsScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const saveClinicStatus = async (
+    clinic: Clinic,
+    status: Clinic["status"]
+  ) => {
+    try {
+      setUpdatingClinicId(clinic.id);
+      const response = await apiRequest(
+        `/api/clinics/${clinic.id}/status`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status }),
+        }
+      );
+      await loadClinics();
+      showMessage(
+        status === "inactive" ? "Clinic deactivated" : "Clinic reactivated",
+        response?.message || `Clinic is now ${status}.`
+      );
+    } catch (requestError: any) {
+      showMessage(
+        "Unable to update clinic",
+        requestError?.message || "Please try again."
+      );
+    } finally {
+      setUpdatingClinicId(null);
+    }
+  };
+
+  const confirmClinicStatusChange = (clinic: Clinic) => {
+    const nextStatus =
+      clinic.status === "active" ? "inactive" : "active";
+    const title =
+      nextStatus === "inactive" ? "Deactivate clinic?" : "Reactivate clinic?";
+    const message =
+      nextStatus === "inactive"
+        ? "This clinic will stop accepting bookings and staff will lose clinic access. Its history will be preserved. Deactivation is blocked while upcoming appointments or an active queue remain."
+        : "This clinic and its staff access will become active again.";
+    const save = () => {
+      void saveClinicStatus(clinic, nextStatus);
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(`${title}\n\n${message}`)) {
+        save();
+      }
+      return;
+    }
+
+    Alert.alert(title, message, [
+      {
+        text: nextStatus === "inactive" ? "Keep active" : "Cancel",
+        style: "cancel",
+      },
+      {
+        text: nextStatus === "inactive" ? "Deactivate" : "Reactivate",
+        style: nextStatus === "inactive" ? "destructive" : "default",
+        onPress: save,
+      },
+    ]);
   };
 
   if (loading) {
@@ -240,16 +302,44 @@ export default function AdminClinicsScreen() {
                     {clinic.email || "Email not set"}
                   </Text>
                 </View>
-                <Text
-                  style={[
-                    styles.status,
-                    clinic.status === "active"
-                      ? styles.active
-                      : styles.inactive,
-                  ]}
-                >
-                  {clinic.status.toUpperCase()}
-                </Text>
+                <View style={styles.clinicActions}>
+                  <Text
+                    style={[
+                      styles.status,
+                      clinic.status === "active"
+                        ? styles.active
+                        : styles.inactive,
+                    ]}
+                  >
+                    {clinic.status.toUpperCase()}
+                  </Text>
+                  <Pressable
+                    disabled={updatingClinicId !== null}
+                    onPress={() => confirmClinicStatusChange(clinic)}
+                    style={[
+                      styles.statusButton,
+                      clinic.status === "active"
+                        ? styles.deactivateButton
+                        : styles.reactivateButton,
+                      updatingClinicId !== null && styles.disabled,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.statusButtonText,
+                        clinic.status === "active"
+                          ? styles.deactivateButtonText
+                          : styles.reactivateButtonText,
+                      ]}
+                    >
+                      {updatingClinicId === clinic.id
+                        ? "Updating..."
+                        : clinic.status === "active"
+                          ? "Deactivate"
+                          : "Reactivate"}
+                    </Text>
+                  </Pressable>
+                </View>
               </View>
             ))
           )}
@@ -345,6 +435,7 @@ const styles = StyleSheet.create({
   buttonText: { color: "#FFFFFF", fontWeight: "800" },
   clinicRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
@@ -352,12 +443,37 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E2E8F0",
   },
-  clinicInfo: { flex: 1 },
+  clinicInfo: { flex: 1, minWidth: 180 },
+  clinicActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
   clinicName: { color: "#172033", fontWeight: "800", fontSize: 15 },
   muted: { color: "#64748B", fontSize: 12, marginTop: 4 },
   status: { fontSize: 10, fontWeight: "900" },
   active: { color: "#15803D" },
   inactive: { color: "#B91C1C" },
+  statusButton: {
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: 10,
+    borderRadius: 9,
+    borderWidth: 1,
+  },
+  statusButtonText: { fontSize: 11, fontWeight: "800" },
+  deactivateButton: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+  },
+  deactivateButtonText: { color: "#B91C1C" },
+  reactivateButton: {
+    backgroundColor: "#F0FDF4",
+    borderColor: "#BBF7D0",
+  },
+  reactivateButtonText: { color: "#15803D" },
   error: {
     padding: 12,
     borderRadius: 10,

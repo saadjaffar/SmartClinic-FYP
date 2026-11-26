@@ -915,17 +915,6 @@ export default function DoctorScreen() {
                   }
                 />
 
-                <View
-                  style={
-                    styles.toolDivider
-                  }
-                />
-
-                <ToolRow
-                  icon="📝"
-                  title="Consultations"
-                  subtitle="Record diagnosis, prescription and notes"
-                />
               </View>
 
               {/* ACCOUNT */}
@@ -1048,17 +1037,14 @@ function ToolRow({
   icon: string;
   title: string;
   subtitle: string;
-  onPress?: () => void;
+  onPress: () => void;
 }) {
   return (
     <Pressable
-      disabled={!onPress}
       onPress={onPress}
       style={({ pressed }) => [
         styles.toolRow,
-        pressed &&
-          onPress &&
-          styles.pressed,
+        pressed && styles.pressed,
       ]}
     >
       <View style={styles.toolIcon}>
@@ -1075,15 +1061,9 @@ function ToolRow({
         </Text>
       </View>
 
-      {onPress ? (
-        <Text style={styles.toolArrow}>
-          ›
-        </Text>
-      ) : (
-        <Text style={styles.toolComing}>
-          Soon
-        </Text>
-      )}
+      <Text style={styles.toolArrow}>
+        ›
+      </Text>
     </Pressable>
   );
 }
@@ -1572,16 +1552,6 @@ const styles = StyleSheet.create({
     color: "#94A3B8",
     fontSize: 9,
     marginTop: 3,
-  },
-
-  toolComing: {
-    color: "#0F766E",
-    fontSize: 9,
-    fontWeight: "800",
-    backgroundColor: "#ECFDF5",
-    borderRadius: 15,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
   },
 
   toolDivider: {

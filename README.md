@@ -69,6 +69,7 @@ The project is developed as a Final Year Project using React Native / Expo, Flas
 - Super Admin dashboard
 - View system statistics
 - Manually create clinics and their first Clinic Admin
+- Super Admin can deactivate/reactivate clinics; deactivation preserves history and is blocked while upcoming or in-progress appointments or an active queue remain
 - Clinic Admin invites doctors, adds receptionists, and manages clinic-scoped staff access
 - Doctors approve new clinic associations from an email link
 - Receptionists have one active clinic assignment at a time

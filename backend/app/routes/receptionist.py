@@ -6,6 +6,7 @@ from sqlalchemy import and_, or_
 from app import db
 from app.models.appointment import Appointment
 from app.models.appointment_slot import AppointmentSlot
+from app.models.clinic import Clinic
 from app.models.doctor import Doctor
 from app.models.doctor_clinic_membership import DoctorClinicMembership
 from app.models.patient import Patient
@@ -1231,6 +1232,19 @@ def create_emergency_walk_in():
             db.session.rollback()
             return {
                 "message": "Doctor not found",
+                "status": "error",
+            }, 404
+
+        clinic = (
+            Clinic.query
+            .filter_by(id=request.clinic_id)
+            .with_for_update()
+            .first()
+        )
+        if not clinic or clinic.status != "active":
+            db.session.rollback()
+            return {
+                "message": "Active clinic not found",
                 "status": "error",
             }, 404
 

@@ -45,6 +45,7 @@ type Appointment = {
   notes?: string | null;
   queue_token?: number | null;
   queue_status?: string | null;
+  queue_checked_in?: boolean | null;
 };
 
 export default function AppointmentsScreen() {
@@ -501,6 +502,11 @@ function AppointmentCard({
 }) {
   const isPastAppointment =
     getAppointmentTimestamp(appointment) <= Date.now();
+  const isPastUnattendedAppointment =
+    isPastAppointment &&
+    ["pending", "confirmed"].includes(appointment.status) &&
+    appointment.queue_status === "waiting" &&
+    appointment.queue_checked_in === false;
 
   const canCancel =
     appointment.booking_source !== "walk_in" &&
@@ -546,7 +552,11 @@ function AppointmentCard({
         </View>
 
         <StatusBadge
-          status={appointment.status}
+          status={
+            isPastUnattendedAppointment
+              ? "not_checked_in"
+              : appointment.status
+          }
         />
       </View>
 
@@ -638,7 +648,9 @@ function AppointmentCard({
               style={styles.secondaryValue}
             >
               {formatStatus(
-                appointment.queue_status
+                isPastUnattendedAppointment
+                  ? "not_checked_in"
+                  : appointment.queue_status
               )}
             </Text>
           </View>
@@ -729,7 +741,7 @@ function DetailItem({
 function StatusBadge({
   status,
 }: {
-  status: Appointment["status"];
+  status: Appointment["status"] | "not_checked_in";
 }) {
   const config = getStatusConfig(status);
 
@@ -768,9 +780,16 @@ function StatusBadge({
 }
 
 function getStatusConfig(
-  status: Appointment["status"]
+  status: Appointment["status"] | "not_checked_in"
 ) {
   switch (status) {
+    case "not_checked_in":
+      return {
+        label: "Not Checked In",
+        color: "#475569",
+        backgroundColor: "#E2E8F0",
+      };
+
     case "confirmed":
       return {
         label: "Confirmed",

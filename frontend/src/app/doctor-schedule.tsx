@@ -1224,7 +1224,7 @@ export default function DoctorScheduleScreen() {
                     styles.selectedDateInfo
                   }
                 >
-                  <View>
+                  <View style={styles.selectedDateText}>
                     <Text
                       style={
                         styles.selectedDateLabel
@@ -2666,10 +2666,16 @@ const styles =
 
     selectedDateInfo: {
       flexDirection: "row",
+      flexWrap: "wrap",
       justifyContent: "space-between",
       alignItems: "center",
       gap: 14,
       marginTop: 18,
+    },
+
+    selectedDateText: {
+      flex: 1,
+      minWidth: 180,
     },
 
     selectedDateLabel: {
@@ -2689,6 +2695,7 @@ const styles =
       backgroundColor: "#0F766E",
       borderRadius: 10,
       minWidth: 140,
+      flexGrow: 1,
       paddingHorizontal: 16,
       paddingVertical: 12,
       alignItems: "center",

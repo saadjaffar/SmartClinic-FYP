@@ -3,11 +3,18 @@ import React, {
 } from "react";
 
 import {
+  StatusBar,
+} from "react-native";
+import {
   Stack,
   type Href,
   useRouter,
   useSegments,
 } from "expo-router";
+import {
+  SafeAreaProvider,
+  SafeAreaView,
+} from "react-native-safe-area-context";
 
 import {
   clearAuth,
@@ -372,10 +379,22 @@ export default function RootLayout() {
 
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    />
+    <SafeAreaProvider>
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: "#F6F8FB" }}
+        edges={["top", "bottom"]}
+      >
+        <StatusBar
+          barStyle="dark-content"
+          backgroundColor="#F6F8FB"
+          translucent={false}
+        />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+          }}
+        />
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
